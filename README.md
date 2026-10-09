@@ -11,6 +11,17 @@ Seeded users: Priya `+919810000001` and Rohan `+919810000002` (with existing cha
 Open two browsers (or one normal and one private window) as Priya and Rohan (the login page has one-click buttons) to see real-time delivery, read receipts, typing and presence.
 Any new phone number signs up a new user and goes through onboarding (name, about, avatar).
 
+## Tech stack
+- **Frontend:** Next.js (App Router) + TypeScript, TanStack Query, Zustand, plain CSS design tokens (light/dark), lucide-react icons.
+- **Backend:** Python, FastAPI, SQLAlchemy, SQLite (WAL), WebSockets for live events, WebRTC (signalled over the WebSocket) for calls.
+- **Tests:** pytest (backend, 101 tests), Vitest (frontend), Playwright used for visual checks.
+
+## Assumptions
+- Phone number is the identity; verification is mocked with the fixed OTP `123456`, and encryption is simulated (visual only).
+- Calls, Stories and linked devices go beyond the brief's "Coming Soon" placeholders and are implemented in a simplified form (see limitations below).
+- Signal's own font and icon set aren't available, so the UI matches layout, colours, spacing and behaviour rather than being pixel-identical.
+- Demo data is seeded when the database is empty.
+
 ## Run locally
 ```bash
 # backend (Python 3.11+)
@@ -38,7 +49,8 @@ npm run typecheck && npm test
 - Signal-style extras: block/unblock (direct chats), Note to Self, mark as unread, pinned messages (up to 3, any member), multi-select (copy / forward / delete), All media gallery (Media / Files / Audio / Links), @mentions in groups, voice notes (MediaRecorder), link previews (server-side fetch with an SSRF guard)
 - Message requests (first message from a non-contact waits in a separate list until you Accept, Delete or Block; no read receipts are sent before you accept), Stories (24-hour text/photo posts for contacts and chat partners, with view tracking), Linked devices (list and unlink signed-in sessions), 1:1 voice and video calls (WebRTC; the backend only relays signaling over the WebSocket), forwarding of images/files, browser (OS-level) notifications
 - Settings: General, Appearance, Chats (link previews, Enter-to-send), Notifications (toasts, content, sound) and Privacy (read receipts, typing indicators, online status, blocked list) are all functional; calls are one-to-one only
-- Extra: outbound webhooks (retries with backoff, delivery log) and inbound webhooks that post as a bot
+
+- Extra (developer, API only, no UI): outbound webhooks (retries with backoff, delivery log) and inbound webhooks that post as a bot
 
 ## Architecture
 Modular monolith: `api (routes) → services (rules, transactions) → db (SQLAlchemy models)`; `realtime/` pushes events, `tasks/` runs the expiry sweeper and webhook worker.
@@ -68,8 +80,8 @@ Key decisions (all explainable and tested):
 | Messages | `GET/POST /conversations/{id}/messages`, `POST .../read`, `.../delivered`, `PUT/DELETE /messages/{id}/reaction`, `PATCH /messages/{id}` (edit), `POST /messages/{id}/hide` (delete for me), `DELETE /messages/{id}`, `GET /conversations/{id}/search`, `GET /messages/{id}/receipts`, `POST /attachments`, `GET /attachments/{id}` |
 | Privacy | `GET /blocks`, `POST/DELETE /blocks/{user_id}` |
 | Stories | `GET/POST /stories`, `POST /stories/image`, `GET /stories/{id}/media`, `POST /stories/{id}/view`, `GET /stories/{id}/views`, `DELETE /stories/{id}` |
+| Webhooks (API only) | `/webhooks` CRUD + `/test` + `/deliveries`, `/conversations/{id}/inbound-hooks`, `POST /hooks/in/{token}` |
 | Calls | `GET /calls` (history, derived from the call entries logged in each chat) |
-| Webhooks (Settings → Webhooks) | `/webhooks` CRUD + `/test` + `/deliveries`, `/conversations/{id}/inbound-hooks`, `POST /hooks/in/{token}`, `POST /dev/webhook-echo` |
 
 WebSocket `/ws?ticket=…` events: `message.new|edited|deleted|expired`, `receipt.updated`, `reaction.updated`, `conversation.updated`, `member.added|removed`, `presence.updated`, `typing.start|stop`, `pong`. Call signaling (WebRTC offer/answer/ICE is only relayed, never stored): client sends `call.invite|accept|decline|end|signal`; server pushes `call.incoming|accepted|ended|signal`. Envelope: `{event, event_id, conversation_id, payload}`.
 

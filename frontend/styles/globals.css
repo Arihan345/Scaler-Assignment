@@ -699,3 +699,13 @@ button:focus-visible, [role=button]:focus-visible, a:focus-visible, input:focus-
 :root[data-theme="dark"] .thread-header { box-shadow: 0 1px 4px rgba(0,0,0,.4); }
 .bubble--reacted { padding-bottom: 8px; margin-bottom: 14px; }
 .bubble--reacted .reactions { bottom: -12px; }
+
+/* profile photo dialog */
+.profile-card { position: relative; width: 436px; max-width: calc(100vw - 32px); background: var(--bg-card, var(--bg-pane)); border-radius: 28px; padding: 22px; box-shadow: var(--shadow); }
+.profile-card__close { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border-radius: 50%; background: var(--bg-pane); display: grid; place-items: center; z-index: 1; }
+.profile-card__photo { display: flex; justify-content: center; padding: 30px 0 18px; }
+.profile-card__photo .avatar { width: min(300px, 70vw) !important; height: min(300px, 70vw) !important; font-size: 96px !important; }
+.profile-card__rows { background: var(--bg-pane); border-radius: 16px; padding: 4px 0; }
+.profile-card__row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 10px 16px; font-size: 15px; }
+.profile-card__icon { display: inline-flex; flex: none; }
+.profile-card__note { padding: 0 16px 10px 50px; font-size: 13px; margin: 0; }

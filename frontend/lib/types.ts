@@ -153,6 +153,16 @@ export type OutboxItem = {
   error?: string;
 };
 
+export type Story = { id: string; kind: "TEXT" | "IMAGE"; body: string | null; bg: string | null; created_at: string; expires_at: string; viewed: boolean; has_media: boolean; view_count?: number };
+export type StoryGroup = { user: User; stories: Story[]; all_viewed: boolean };
+export type StoryFeed = { mine: Story[]; others: StoryGroup[] };
+export type DeviceSession = { id: string; device: string; created_at: string; last_used_at: string; current: boolean };
+
+export type CallEntry = {
+  id: number; conversation_id: string; created_at: string; video: boolean;
+  outcome: "completed" | "missed" | "declined" | string | null; duration: number; outgoing: boolean; peer: User | null;
+};
+
 export type WebhookEndpoint = {
   id: string;
   url: string;
@@ -184,14 +194,4 @@ export type InboundHook = {
   path: string;
   bot_user_id: string;
   is_active: boolean;
-};
-
-export type Story = { id: string; kind: "TEXT" | "IMAGE"; body: string | null; bg: string | null; created_at: string; expires_at: string; viewed: boolean; has_media: boolean; view_count?: number };
-export type StoryGroup = { user: User; stories: Story[]; all_viewed: boolean };
-export type StoryFeed = { mine: Story[]; others: StoryGroup[] };
-export type DeviceSession = { id: string; device: string; created_at: string; last_used_at: string; current: boolean };
-
-export type CallEntry = {
-  id: number; conversation_id: string; created_at: string; video: boolean;
-  outcome: "completed" | "missed" | "declined" | string | null; duration: number; outgoing: boolean; peer: User | null;
 };

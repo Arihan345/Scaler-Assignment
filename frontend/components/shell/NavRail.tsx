@@ -1,4 +1,9 @@
 "use client";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { keys } from "@/lib/query";
+import type { CallEntry } from "@/lib/types";
 import { Menu as MenuIcon, MessageCircle, Phone, RectangleVertical, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,6 +17,17 @@ export function NavRail() {
   const toggle = useUi((s) => s.toggleNav);
   const { data } = useConversationList(false);
   const unread = (data ?? []).reduce((n, c) => n + (c.unread_count > 0 || c.marked_unread ? 1 : 0), 0);
+  const calls = useQuery({ queryKey: keys.calls, queryFn: () => api.get<CallEntry[]>("/calls"), refetchInterval: 20000 });
+  const [seen, setSeen] = useState(() => { try { return localStorage.getItem("signal.callsSeen") ?? ""; } catch { return ""; } });
+  const onCalls = pathname.startsWith("/calls");
+  useEffect(() => {
+    if (!onCalls) return;
+    const now = new Date().toISOString();
+    setSeen(now);
+    try { localStorage.setItem("signal.callsSeen", now); } catch { /* storage unavailable */ }
+  }, [onCalls, calls.data]);
+  // Red badge on Calls: incoming calls I missed since I last had the Calls tab open.
+  const missed = (calls.data ?? []).filter((c) => !c.outgoing && c.outcome === "missed" && c.created_at > seen).length;
   const chatsActive = pathname === "/" || pathname.startsWith("/c/");
   const callsActive = pathname.startsWith("/calls");
   const storiesActive = pathname.startsWith("/stories");
@@ -30,6 +46,7 @@ export function NavRail() {
       <Link href="/calls" className={`icon-btn nav-btn ${callsActive ? "is-active" : ""}`} aria-label="Calls" data-tip="Calls">
         <span className="nav-btn__icon"><Phone size={24} fill={callsActive ? "currentColor" : "none"} /></span>
         <span className="nav-btn__label">Calls</span>
+        {missed > 0 && !onCalls && <span className="badge badge--red">{missed > 99 ? "99+" : missed}</span>}
       </Link>
       <Link href="/stories" className={`icon-btn nav-btn ${storiesActive ? "is-active" : ""}`} aria-label="Stories" data-tip="Stories">
         <span className="nav-btn__icon"><RectangleVertical size={24} fill={storiesActive ? "currentColor" : "none"} /></span>

@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { Link2, ListFilter, MoreHorizontal, PhoneCall, Search, Video } from "lucide-react";
+import { Link2, ListFilter, MoreHorizontal, Phone, PhoneCall, Search, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
@@ -16,7 +16,7 @@ import { NewChatModal } from "@/components/dialogs/NewChatModal";
 
 function subtitle(c: CallEntry) {
   const missed = !c.outgoing && c.outcome !== "completed" && c.outcome !== "declined";
-  const label = missed ? "Missed" : c.outgoing ? (c.outcome === "completed" ? "Outgoing" : "Unanswered") : c.outcome === "declined" ? "Declined" : "Incoming";
+  const label = missed ? "Missed" : c.outgoing ? "Outgoing" : c.outcome === "declined" ? "Declined" : "Incoming";
   return `${label} · ${listTime(c.created_at)}`;
 }
 
@@ -69,11 +69,11 @@ export function CallsPane() {
             <div key={c.id} className="conv-row" role="button" tabIndex={0} onClick={() => router.push(`/c/${c.conversation_id}`)} onKeyDown={(e) => e.key === "Enter" && router.push(`/c/${c.conversation_id}`)}>
               {c.peer && <Avatar id={c.peer.id} name={c.peer.display_name} src={c.peer.avatar_url} />}
               <div className="conv-row__body">
-                <div className="conv-row__title" style={missed ? { color: "var(--danger)" } : undefined}>{c.peer?.display_name ?? "Unknown"}</div>
+                <div className="conv-row__title">{c.peer?.display_name ?? "Unknown"}</div>
                 <div className="conv-row__preview" style={missed ? { color: "var(--danger)" } : undefined}>{subtitle(c)}</div>
               </div>
               <button className="icon-btn" aria-label={c.video ? "Video call" : "Voice call"} onClick={(e) => { e.stopPropagation(); if (c.peer) void startCall(c.conversation_id, c.peer, c.video); }}>
-                {c.video ? <Video size={20} /> : <PhoneCall size={20} />}
+                {c.video ? <Video size={22} color={missed ? "var(--danger)" : undefined} /> : <Phone size={22} color={missed ? "var(--danger)" : undefined} />}
               </button>
             </div>
           );

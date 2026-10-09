@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Bell, BellOff, Camera, LogOut, Pencil, Search, ShieldCheck, Timer, UserPlus, Video, Webhook } from "lucide-react";
+import { Ban, Bell, BellOff, Camera, LogOut, Pencil, Search, ShieldCheck, Timer, UserPlus, Video } from "lucide-react";
 import { startCall } from "@/lib/calls";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
@@ -8,7 +8,7 @@ import { api, errorMessage } from "@/lib/api";
 import { convTitle, formatTimer, isMuted } from "@/lib/format";
 import { useConversation, useContacts, useUserSearch } from "@/lib/hooks";
 import { keys } from "@/lib/query";
-import type { ConversationDetail, InboundHook, Member, User } from "@/lib/types";
+import type { ConversationDetail, Member, User } from "@/lib/types";
 import { useAuth } from "@/store/auth";
 import { useUi } from "@/store/ui";
 import { Avatar } from "@/components/ui/Avatar";
@@ -142,7 +142,6 @@ export function DetailsPanel({ convId, onClose, onSearch }: { convId: string; on
         </div>
       )}
 
-      <InboundHooks convId={convId} canManage={!isGroup || admin} />
 
       {(isGroup || (peer && !c.is_note_to_self)) && (
         <div className="card card--danger">
@@ -205,41 +204,5 @@ function AddMembers({ conv, onClose }: { conv: ConversationDetail; onClose: () =
       ))}
       {error && <span className="field__error">{error}</span>}
     </Modal>
-  );
-}
-
-function InboundHooks({ convId, canManage }: { convId: string; canManage: boolean }) {
-  const qc = useQueryClient();
-  const [name, setName] = useState("");
-  const { data } = useQuery({ queryKey: ["inbound", convId], queryFn: () => api.get<InboundHook[]>(`/conversations/${convId}/inbound-hooks`) });
-  const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
-  if (!canManage && !(data?.length)) return null;
-  const reload = () => qc.invalidateQueries({ queryKey: ["inbound", convId] });
-  return (
-    <section style={{ marginTop: 20 }}>
-      <h3 style={{ display: "flex", gap: 8, alignItems: "center" }}><Webhook size={16} /> Incoming webhooks</h3>
-      <p className="muted" style={{ fontSize: 12 }}>External services can POST <span className="mono">{`{"text": "..."}`}</span> to a hook URL and it appears in this chat as a bot.</p>
-      {(data ?? []).map((h) => (
-        <div className="card" key={h.id}>
-          <b>{h.name}</b>
-          <div className="mono" style={{ margin: "6px 0" }}>{apiBase}/api/hooks/in/{h.token}</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button onClick={() => navigator.clipboard?.writeText(`${apiBase}/api/hooks/in/${h.token}`)}>Copy URL</Button>
-            {canManage && <Button variant="danger" onClick={async () => { try { await api.del(`/inbound-hooks/${h.id}`); reload(); qc.invalidateQueries({ queryKey: keys.conversation(convId) }); } catch (e) { useUi.getState().toast(errorMessage(e), "error"); } }}>Delete</Button>}
-          </div>
-        </div>
-      ))}
-      {canManage && (
-        <form style={{ display: "flex", gap: 8 }} onSubmit={async (e) => {
-          e.preventDefault();
-          if (!name.trim()) return;
-          try { await api.post(`/conversations/${convId}/inbound-hooks`, { name: name.trim() }); setName(""); reload(); qc.invalidateQueries({ queryKey: keys.conversation(convId) }); }
-          catch (err) { useUi.getState().toast(errorMessage(err), "error"); }
-        }}>
-          <div className="field" style={{ flex: 1, minWidth: 0 }}><input placeholder="Hook name (e.g. CI)" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} aria-label="Hook name" /></div>
-          <Button type="submit" variant="primary">Create</Button>
-        </form>
-      )}
-    </section>
   );
 }

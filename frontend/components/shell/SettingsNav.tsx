@@ -1,5 +1,5 @@
 "use client";
-import { Bell, ChevronLeft, CircleUser, Heart, History, Lock, MessageCircle, Palette, Phone, PieChart, Settings, Users, Webhook } from "lucide-react";
+import { Bell, ChevronLeft, CircleUser, Heart, History, Lock, MessageCircle, Palette, Phone, PieChart, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
@@ -19,13 +19,12 @@ export const SETTINGS_SECTIONS = [
   { id: "data", label: "Data usage", icon: PieChart, group: 1 },
   { id: "backups", label: "Backups", icon: History, group: 1 },
   { id: "contacts", label: "Contacts", icon: Users, group: 2 },
-  { id: "webhooks", label: "Webhooks (developer)", icon: Webhook, group: 2 },
 ] as const;
 
 export function SettingsNav() {
   const pathname = usePathname();
   const me = useAuth((s) => s.user);
-  const href = (id: string) => (id === "webhooks" ? "/webhooks" : `/settings/${id}`);
+  const href = (id: string) => `/settings/${id}`;
   const active = (id: string) => pathname === href(id);
   const items = SETTINGS_SECTIONS.filter((s) => s.id !== "profile");
   return (

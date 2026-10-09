@@ -70,6 +70,7 @@ export function applyEvent(qc: QueryClient, ev: WsEnvelope, ctx: Ctx) {
         notify(qc, m, ctx);
       }
       if (m.type === "SYSTEM") qc.invalidateQueries({ queryKey: keys.conversation(m.conversation_id) });
+      if (m.type === "SYSTEM" && m.system_event?.kind === "call") qc.invalidateQueries({ queryKey: keys.calls }); // Calls tab list and missed-call badge update instantly
       break;
     }
     case "message.edited": {

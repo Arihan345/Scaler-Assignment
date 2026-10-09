@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Archive, Bell, BellOff, Ban, MailOpen, ChevronLeft, Images, MoreHorizontal, Pin, PinOff, Search, Settings2, Timer, UserCheck, Phone, Video, BadgeCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { convTitle, conversationOnline, formatTimer, isMuted, lastSeen } from "@/lib/format";
 import { keys } from "@/lib/query";
@@ -14,6 +14,7 @@ import { useUi } from "@/store/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { IconButton } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
+import { ProfileDialog } from "@/components/dialogs/ProfileDialog";
 
 const TIMER_CHOICES = [0, 2419200, 604800, 86400, 28800, 3600, 300, 30];
 const hours = (h: number) => () => new Date(Date.now() + h * 3600_000).toISOString();
@@ -28,6 +29,7 @@ const MUTE_CHOICES = [
 export function ThreadHeader({ detail, onDetails, onSearch, onMedia }: { detail: ConversationDetail; onDetails: () => void; onSearch: () => void; onMedia: () => void }) {
   const qc = useQueryClient();
   const router = useRouter();
+  const [profile, setProfile] = useState(false);
   const meId = useAuth((s) => s.user!.id);
   const presence = useUi((s) => s.presence);
   const typing = useUi((s) => s.typing[detail.id]);
@@ -83,10 +85,13 @@ export function ThreadHeader({ detail, onDetails, onSearch, onMedia }: { detail:
 
   const canCall = detail.type === "DIRECT" && !note && !!detail.peer && !detail.blocked && !detail.is_request;
   return (
+    <>
     <header className="thread-header">
       <Link href="/" className="icon-btn back-btn" aria-label="Back"><ChevronLeft size={22} /></Link>
       <button className="thread-header__who" onClick={note ? undefined : onDetails} aria-label="Conversation details" style={note ? { cursor: "default" } : undefined}>
-        <Avatar note={note} id={detail.peer?.id ?? detail.id} name={title} src={detail.type === "GROUP" ? detail.avatar_url : detail.peer?.avatar_url} size={44} online={conversationOnline(detail, presence)} />
+        <span role="button" tabIndex={0} aria-label="View profile photo" onClick={(e) => { e.stopPropagation(); setProfile(true); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setProfile(true); } }}>
+          <Avatar note={note} id={detail.peer?.id ?? detail.id} name={title} src={detail.type === "GROUP" ? detail.avatar_url : detail.peer?.avatar_url} size={44} online={conversationOnline(detail, presence)} />
+        </span>
         <span style={{ minWidth: 0 }}>
           <div className="thread-header__title"><span className="ellipsis">{title}</span>{note && <BadgeCheck size={18} className="verified" aria-label="Verified: only you can read this chat" />}</div>
           <div className="thread-header__sub">{sub}</div>
@@ -118,5 +123,7 @@ export function ThreadHeader({ detail, onDetails, onSearch, onMedia }: { detail:
         { label: detail.blocked ? "Unblock" : "Block", icon: detail.blocked ? <UserCheck size={17} /> : <Ban size={17} />, hidden: detail.type !== "DIRECT" || note || !detail.peer, onClick: toggleBlock },
       ]} />
     </header>
+    {profile && <ProfileDialog detail={detail} onClose={() => setProfile(false)} />}
+    </>
   );
 }
