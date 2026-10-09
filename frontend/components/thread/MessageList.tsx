@@ -5,16 +5,17 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { api, errorMessage } from "@/lib/api";
 import { retrySend } from "@/lib/actions";
 import { dayKey, dayLabel, systemText } from "@/lib/format";
-import { keys, markDeleted, mergeOlder } from "@/lib/query";
+import { keys, markDeleted, mergeOlder, removeMessages } from "@/lib/query";
 import { scheduleRead } from "@/lib/realtime";
 import { computeStatus } from "@/lib/status";
 import type { ConversationDetail, DisplayStatus, Message, MessagesPage, OutboxItem } from "@/lib/types";
 import { useUi } from "@/store/ui";
 import { Avatar } from "@/components/ui/Avatar";
-import { ConfirmDialog } from "@/components/ui/Modal";
+import { Modal } from "@/components/ui/Modal";
 import { ErrorState } from "@/components/ui/EmptyState";
 import { ThreadSkeleton } from "@/components/ui/Skeleton";
 import { MessageInfo } from "@/components/dialogs/MessageInfo";
+import { ForwardModal } from "@/components/dialogs/ForwardModal";
 import { MessageBubble } from "./MessageBubble";
 
 const GROUP_WINDOW_MS = 5 * 60_000;
@@ -30,7 +31,9 @@ function pendingToMessage(o: OutboxItem, i: number, meId: string): Message {
   };
 }
 
-export function MessageList({ convId, detail, meId }: { convId: string; detail: ConversationDetail; meId: string }) {
+export type JumpTarget = { id: number; seq: number; n: number };
+
+export function MessageList({ convId, detail, meId, jump }: { convId: string; detail: ConversationDetail; meId: string; jump: JumpTarget | null }) {
   const qc = useQueryClient();
   const box = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -39,6 +42,7 @@ export function MessageList({ convId, detail, meId }: { convId: string; detail: 
   const [visible, setVisible] = useState(true);
   const [toDelete, setToDelete] = useState<Message | null>(null);
   const [info, setInfo] = useState<Message | null>(null);
+  const [forward, setForward] = useState<Message | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const anchor = useRef<{ height: number; top: number } | null>(null);
   const prevLast = useRef<{ key: string; count: number } | null>(null);
@@ -145,9 +149,51 @@ export function MessageList({ convId, detail, meId }: { convId: string; detail: 
     if (el.scrollTop < 120) void loadOlder();
   }
 
-  const scrollBottom = () => { const el = box.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }); };
+  const scrollBottom = async () => {
+    const el = box.current;
+    if (data?.has_more_after) {
+      // We're viewing an older window (after a search jump): reload the latest page first.
+      try { qc.setQueryData(keys.messages(convId), await api.get<MessagesPage>(`/conversations/${convId}/messages?limit=50`)); } catch (e) { useUi.getState().toast(errorMessage(e), "error"); return; }
+      requestAnimationFrame(() => { const b = box.current; if (b) b.scrollTop = b.scrollHeight; });
+      return;
+    }
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
 
-  const jump = (id: number) => {
+  // Jump to a search result: if it isn't loaded, load the window around it first.
+  useEffect(() => {
+    if (!jump) return;
+    let cancelled = false;
+    (async () => {
+      if (!document.getElementById(`m-${jump.id}`)) {
+        try {
+          qc.setQueryData(keys.messages(convId), await api.get<MessagesPage>(`/conversations/${convId}/messages?around_seq=${jump.seq}&limit=50`));
+        } catch (e) { useUi.getState().toast(errorMessage(e), "error"); return; }
+        await new Promise((r) => setTimeout(r, 80));
+      }
+      if (cancelled) return;
+      const el = document.getElementById(`m-${jump.id}`);
+      if (!el) return;
+      el.scrollIntoView({ block: "center" });
+      setNewCount(0);
+      el.classList.add("is-flash");
+      setTimeout(() => el.classList.remove("is-flash"), 1700);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jump?.n]);
+
+  async function hideForMe(m: Message) {
+    try {
+      await api.post(`/messages/${m.id}/hide`);
+      removeMessages(qc, convId, [m.id]);
+      qc.invalidateQueries({ queryKey: keys.conversationsAll });
+    } catch (e) {
+      useUi.getState().toast(errorMessage(e), "error");
+    }
+  }
+
+  const jumpToReply = (id: number) => {
     const el = document.getElementById(`m-${id}`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     else useUi.getState().toast("That message is further back. Scroll up to load it.");
@@ -216,8 +262,8 @@ export function MessageList({ convId, detail, meId }: { convId: string; detail: 
                     avatar={sender && <Avatar id={sender.id} name={sender.display_name} src={sender.avatar_url} size={28} />}
                     gap={!sameAsPrev && !newDay && !!prev}
                     onReply={(x) => useUi.getState().setReplyTo(convId, x)}
-                    onReact={react} onDelete={setToDelete} onInfo={setInfo}
-                    onRetry={(cid) => retrySend(qc, convId, cid)} onJump={jump} onImage={setLightbox}
+                    onReact={react} onDelete={setToDelete} onInfo={setInfo} onForward={setForward} onEdit={(x) => useUi.getState().setEditing(convId, x)}
+                    onRetry={(cid) => retrySend(qc, convId, cid)} onJump={jumpToReply} onImage={setLightbox}
                   />
                 )}
               </Fragment>
@@ -230,13 +276,26 @@ export function MessageList({ convId, detail, meId }: { convId: string; detail: 
           )}
         </div>
       </div>
-      {!atBottom && (
+      {(!atBottom || data.has_more_after) && (
         <button className="scroll-bottom-btn" aria-label="Scroll to latest message" onClick={scrollBottom}>
           <ArrowDown size={20} />
           {newCount > 0 && <span className="badge">{newCount}</span>}
         </button>
       )}
-      {toDelete && <ConfirmDialog title="Delete message?" message="This message will be deleted for everyone in the chat." confirmLabel="Delete" danger onConfirm={() => doDelete(toDelete)} onClose={() => setToDelete(null)} />}
+      {toDelete && (
+        <Modal title="Delete message?" width={420} onClose={() => setToDelete(null)} footer={
+          <>
+            <button className="btn btn--secondary" onClick={() => setToDelete(null)}>Cancel</button>
+            <button className="btn btn--secondary" onClick={() => { void hideForMe(toDelete); setToDelete(null); }}>Delete for me</button>
+            {toDelete.sender_id === meId && <button className="btn btn--danger" onClick={() => { void doDelete(toDelete); setToDelete(null); }}>Delete for everyone</button>}
+          </>
+        }>
+          <p className="muted" style={{ margin: 0 }}>
+            “Delete for me” removes it only from your view.{toDelete.sender_id === meId ? " “Delete for everyone” replaces it with a deleted-message note for all members." : ""}
+          </p>
+        </Modal>
+      )}
+      {forward && <ForwardModal message={forward} onClose={() => setForward(null)} />}
       {info && <MessageInfo message={info} onClose={() => setInfo(null)} />}
       {lightbox && <div className="lightbox" onClick={() => setLightbox(null)} role="dialog" aria-label="Image preview"><img src={lightbox} alt="" /></div>}
     </div>

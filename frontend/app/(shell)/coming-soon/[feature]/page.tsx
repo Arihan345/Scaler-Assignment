@@ -1,11 +1,10 @@
 "use client";
-import { Circle, Monitor } from "lucide-react";
+import { Monitor } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 const FEATURES: Record<string, { title: string; icon: React.ReactNode; text: string }> = {
-  stories: { title: "Stories", icon: <Circle size={44} />, text: "Stories are not part of this demo." },
   "linked-devices": { title: "Linked devices", icon: <Monitor size={44} />, text: "Linking other devices is not part of this demo." },
 };
 

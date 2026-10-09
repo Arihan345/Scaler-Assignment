@@ -27,7 +27,7 @@ function useDebounced<T>(v: T, ms: number) {
 
 export function ListPane() {
   const pathname = usePathname();
-  if (pathname.startsWith("/settings")) return <aside className="list-pane"><SettingsNav /></aside>;
+  if (pathname.startsWith("/settings") || pathname.startsWith("/webhooks")) return <aside className="list-pane"><SettingsNav /></aside>;
   return <aside className="list-pane"><ChatList /></aside>;
 }
 

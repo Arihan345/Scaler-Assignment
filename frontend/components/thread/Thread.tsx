@@ -9,7 +9,8 @@ import { DetailsPanel } from "@/components/dialogs/DetailsPanel";
 import { EmptyState, ErrorState } from "@/components/ui/EmptyState";
 import { ThreadSkeleton } from "@/components/ui/Skeleton";
 import { Composer } from "./Composer";
-import { MessageList } from "./MessageList";
+import { MessageList, type JumpTarget } from "./MessageList";
+import { SearchPanel } from "./SearchPanel";
 import { ThreadHeader } from "./ThreadHeader";
 
 export function Thread({ id }: { id: string }) {
@@ -17,6 +18,8 @@ export function Thread({ id }: { id: string }) {
   const meId = useAuth((s) => s.user!.id);
   const { data: detail, error, isLoading, refetch } = useConversation(id);
   const [details, setDetails] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [jump, setJump] = useState<JumpTarget | null>(null);
 
   useEffect(() => {
     useUi.getState().setOpenConversation(id);
@@ -39,8 +42,9 @@ export function Thread({ id }: { id: string }) {
   const canSend = detail.type === "DIRECT" || !!me?.is_active;
   return (
     <div className="thread">
-      <ThreadHeader detail={detail} onDetails={() => setDetails(true)} />
-      <MessageList convId={id} detail={detail} meId={meId} />
+      <ThreadHeader detail={detail} onDetails={() => setDetails(true)} onSearch={() => setSearching((s) => !s)} />
+      {searching && <SearchPanel detail={detail} meId={meId} onClose={() => setSearching(false)} onPick={(m) => setJump({ id: m.id, seq: m.seq, n: Date.now() })} />}
+      <MessageList convId={id} detail={detail} meId={meId} jump={jump} />
       <Composer convId={id} detail={detail} canSend={canSend} />
       {details && <DetailsPanel convId={id} onClose={() => setDetails(false)} />}
     </div>

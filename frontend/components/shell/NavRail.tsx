@@ -1,5 +1,5 @@
 "use client";
-import { Circle, MessageSquare, Settings, Webhook } from "lucide-react";
+import { MessageSquare, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useConversationList } from "@/lib/hooks";
@@ -21,8 +21,6 @@ export function NavRail() {
   return (
     <nav className="nav-rail" aria-label="Main">
       {item("/", "Chats", <MessageSquare size={22} />, unread)}
-      {item("/coming-soon/stories", "Stories", <Circle size={22} />)}
-      {item("/webhooks", "Webhooks", <Webhook size={22} />)}
       <div className="nav-rail__spacer" />
       {item("/settings", "Settings", <Settings size={22} />)}
       {user && <Link href="/settings/general" aria-label="Profile" className="icon-btn"><Avatar id={user.id} name={user.display_name} src={user.avatar_url} size={32} /></Link>}

@@ -18,7 +18,7 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8000      # seeds demo data when the DB is empty
-pytest                                          # 74 tests
+pytest                                          # 79 tests
 
 # frontend (Node 20+)
 cd frontend
@@ -34,7 +34,7 @@ npm run typecheck && npm test
 - Real-time direct and group messaging, typing indicators, online/last-seen
 - Sent / delivered / read ticks (per-member cursors; group status = slowest eligible recipient)
 - Groups: create, rename, photo, add/remove members, admin roles, leave
-- Bonus: attachments (images/PDF/text), reactions, replies, delete for everyone, disappearing messages, dark mode, responsive layout, keyboard shortcuts (Ctrl/Cmd+K search, Ctrl/Cmd+N new chat, Esc close)
+- Bonus: attachments (images/PDF/text), reactions, replies, edit (3-hour window), forward, delete for me / for everyone, in-chat search, saved drafts, disappearing messages, dark mode, responsive layout, keyboard shortcuts (Ctrl/Cmd+K search, Ctrl/Cmd+N new chat, Esc close)
 - Settings (General, Appearance with working theme; Chats, Notifications, Privacy as labelled placeholders); Stories and Linked devices open "coming soon" screens (calls are not included)
 - Extra: outbound webhooks (retries with backoff, delivery log) and inbound webhooks that post as a bot
 
@@ -63,10 +63,10 @@ Key decisions (all explainable and tested):
 | Auth | `POST /auth/request-otp`, `/auth/verify-otp`, `/auth/logout`, `/auth/ws-ticket` |
 | Users | `GET/PATCH /users/me`, `POST /users/me/avatar`, `GET /users/search`, `GET/POST /contacts`, `DELETE /contacts/{id}` |
 | Conversations | `GET /conversations`, `POST /conversations/direct`, `/groups`, `GET/PATCH /conversations/{id}`, `PATCH .../me`, `POST .../avatar`, `.../members`, `.../leave`, member role/remove |
-| Messages | `GET/POST /conversations/{id}/messages`, `POST .../read`, `.../delivered`, `PUT/DELETE /messages/{id}/reaction`, `DELETE /messages/{id}`, `GET /messages/{id}/receipts`, `POST /attachments`, `GET /attachments/{id}` |
-| Webhooks | `/webhooks` CRUD + `/test` + `/deliveries`, `/conversations/{id}/inbound-hooks`, `POST /hooks/in/{token}`, `POST /dev/webhook-echo` |
+| Messages | `GET/POST /conversations/{id}/messages`, `POST .../read`, `.../delivered`, `PUT/DELETE /messages/{id}/reaction`, `PATCH /messages/{id}` (edit), `POST /messages/{id}/hide` (delete for me), `DELETE /messages/{id}`, `GET /conversations/{id}/search`, `GET /messages/{id}/receipts`, `POST /attachments`, `GET /attachments/{id}` |
+| Webhooks (Settings → Webhooks) | `/webhooks` CRUD + `/test` + `/deliveries`, `/conversations/{id}/inbound-hooks`, `POST /hooks/in/{token}`, `POST /dev/webhook-echo` |
 
-WebSocket `/ws?ticket=…` events: `message.new|deleted|expired`, `receipt.updated`, `reaction.updated`, `conversation.updated`, `member.added|removed`, `presence.updated`, `typing.start|stop`, `pong`. Envelope: `{event, event_id, conversation_id, payload}`.
+WebSocket `/ws?ticket=…` events: `message.new|edited|deleted|expired`, `receipt.updated`, `reaction.updated`, `conversation.updated`, `member.added|removed`, `presence.updated`, `typing.start|stop`, `pong`. Envelope: `{event, event_id, conversation_id, payload}`.
 
 ## Deployment
 - **Frontend → Vercel.** Root directory `frontend`. Set `NEXT_PUBLIC_API_URL` to the backend URL (add `NEXT_PUBLIC_WS_URL` only if it differs).
@@ -76,6 +76,6 @@ WebSocket `/ws?ticket=…` events: `message.new|deleted|expired`, `receipt.updat
 ## Known limitations / trade-offs
 - No real encryption, SMS, or push notifications; calls are not included; stories and linked devices are placeholders.
 - Message list is paged (older messages load on scroll) rather than virtualized.
-- In-chat message search is not implemented.
+- Forward resends text only (attachments aren't re-shared); no block/message-requests, mentions or voice notes.
 - Single backend process: presence and typing state are in memory, so horizontal scaling would need a shared pub/sub.
 - Visual tokens in `frontend/styles/tokens.css` approximate Signal Desktop and can be tuned against screenshots.

@@ -1,5 +1,5 @@
 "use client";
-import { ChevronLeft, Info } from "lucide-react";
+import { ChevronLeft, Info, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { convTitle, conversationOnline, lastSeen } from "@/lib/format";
@@ -9,7 +9,7 @@ import { useUi } from "@/store/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { IconButton } from "@/components/ui/Button";
 
-export function ThreadHeader({ detail, onDetails }: { detail: ConversationDetail; onDetails: () => void }) {
+export function ThreadHeader({ detail, onDetails, onSearch }: { detail: ConversationDetail; onDetails: () => void; onSearch: () => void }) {
   const meId = useAuth((s) => s.user!.id);
   const presence = useUi((s) => s.presence);
   const typing = useUi((s) => s.typing[detail.id]);
@@ -38,6 +38,7 @@ export function ThreadHeader({ detail, onDetails }: { detail: ConversationDetail
           <div className="thread-header__sub">{sub}</div>
         </span>
       </button>
+      <IconButton label="Search in chat" onClick={onSearch}><Search size={20} /></IconButton>
       <IconButton label="Conversation details" onClick={onDetails}><Info size={20} /></IconButton>
     </header>
   );

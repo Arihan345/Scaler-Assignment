@@ -1,5 +1,5 @@
 "use client";
-import { Bell, ChevronLeft, Lock, MessageSquare, Monitor, Palette, User as UserIcon } from "lucide-react";
+import { Bell, ChevronLeft, Lock, MessageSquare, Monitor, Palette, User as UserIcon, Webhook } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -10,6 +10,7 @@ export const SETTINGS_SECTIONS = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "privacy", label: "Privacy", icon: Lock },
   { id: "devices", label: "Linked devices", icon: Monitor },
+  { id: "webhooks", label: "Webhooks (developer)", icon: Webhook },
 ] as const;
 
 export function SettingsNav() {
@@ -22,7 +23,7 @@ export function SettingsNav() {
       </div>
       <nav className="settings__nav" style={{ width: "auto", border: 0 }}>
         {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => (
-          <Link key={id} href={id === "devices" ? "/coming-soon/linked-devices" : `/settings/${id}`} className={pathname === `/settings/${id}` ? "is-active" : ""}>
+          <Link key={id} href={id === "devices" ? "/coming-soon/linked-devices" : id === "webhooks" ? "/webhooks" : `/settings/${id}`} className={pathname === `/settings/${id}` || (id === "webhooks" && pathname === "/webhooks") ? "is-active" : ""}>
             <Icon size={20} /> {label}
           </Link>
         ))}

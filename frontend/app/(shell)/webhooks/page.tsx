@@ -1,5 +1,7 @@
 "use client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { formatTimer } from "@/lib/format";
@@ -40,8 +42,9 @@ export default function WebhooksPage() {
   };
 
   return (
-    <div className="settings">
+    <div className="settings has-section">
       <div className="settings__content" style={{ maxWidth: 760 }}>
+        <Link href="/settings" className="icon-btn back-btn" aria-label="Back to settings"><ChevronLeft size={22} /></Link>
         <h2>Webhooks</h2>
         <p className="muted">Outbound webhooks POST signed-by-token JSON to your URL when events happen. Deliveries retry with backoff. For a quick demo, point one at <span className="mono">{apiBase}/api/dev/webhook-echo</span>.</p>
         <form className="card" onSubmit={(e) => { e.preventDefault(); void run(async () => { await api.post("/webhooks", { url: url.trim(), events }); setUrl(""); }, "Webhook created"); }}>
