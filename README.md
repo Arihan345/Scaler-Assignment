@@ -5,6 +5,12 @@ A Signal Messenger–style chat app: Next.js (TypeScript) frontend, FastAPI + SQ
 > **Mocked on purpose (per the brief):** authentication uses a fixed OTP (`123456`, no SMS) and there is **no real encryption**.
 > Any lock icons, "safety numbers" and encryption notices are visual only and say so in the UI.
 
+## Live demo
+- **App:** https://scaler-assignment-arihan.vercel.app (Vercel)
+- **API:** https://signal-clone-api-i6g2.onrender.com (Render, health check at `/api/health`)
+- Click **Sign in as Priya** in one window and **Sign in as Rohan** in a private window (OTP `123456`).
+- The backend is on Render's free tier: after idle the first request can take up to a minute while it wakes, and demo data resets on restart (it is re-seeded automatically).
+
 ## Demo accounts
 Login is by phone number only, then code `123456` (a bare 10-digit number is treated as +91).
 Seeded users: Priya `+919810000001` and Rohan `+919810000002` (with existing chats, groups and ~300 messages), plus ananya, karan, meera, vikram and others.
