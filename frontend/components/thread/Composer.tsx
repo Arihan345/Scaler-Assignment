@@ -1,6 +1,6 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Paperclip, Send, Smile, X } from "lucide-react";
+import { Check, Paperclip, Plus, Send, Smile, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { PendingAttachment, sendMessage } from "@/lib/actions";
@@ -161,14 +161,13 @@ export function Composer({ convId, detail, canSend }: { convId: string; detail: 
         </div>
       )}
       <div className="composer__row">
-        <IconButton label="Emoji" onClick={() => setEmoji((v) => !v)}><Smile size={22} /></IconButton>
-        <IconButton label="Attach file" onClick={() => picker.current?.click()}><Paperclip size={22} /></IconButton>
+        <IconButton label="Emoji" onClick={() => setEmoji((v) => !v)}><Smile size={24} /></IconButton>
         <input ref={picker} type="file" hidden multiple accept={ACCEPT} onChange={(e) => upload(e.target.files)} />
         <textarea
           ref={area}
           rows={1}
           value={text}
-          placeholder="Send a message"
+          placeholder="Message"
           aria-label="Message"
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
@@ -180,9 +179,13 @@ export function Composer({ convId, detail, canSend }: { convId: string; detail: 
           }}
           onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); void upload(e.clipboardData.files); } }}
         />
-        <button className="composer__send" aria-label="Send" disabled={(!text.trim() && files.length === 0) || uploading > 0} onClick={submit}>
-          {editing ? <Check size={18} /> : <Send size={18} />}
-        </button>
+        {text.trim() || files.length > 0 || editing ? (
+          <button className="composer__send" aria-label={editing ? "Save edit" : "Send"} disabled={uploading > 0} onClick={submit}>
+            {editing ? <Check size={20} /> : <Send size={20} />}
+          </button>
+        ) : (
+          <IconButton label="Attach file" onClick={() => picker.current?.click()}><Plus size={26} /></IconButton>
+        )}
       </div>
     </div>
   );

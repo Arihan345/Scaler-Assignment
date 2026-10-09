@@ -9,6 +9,7 @@ import type { ConversationListItem } from "@/lib/types";
 import { useAuth } from "@/store/auth";
 import { useUi } from "@/store/ui";
 import { Avatar } from "@/components/ui/Avatar";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { MenuPopup, type MenuItem } from "@/components/ui/Menu";
 
 export function ConversationRow({ item, active, onOpen }: { item: ConversationListItem; active: boolean; onOpen: () => void }) {
@@ -61,8 +62,14 @@ export function ConversationRow({ item, active, onOpen }: { item: ConversationLi
             <span className="conv-row__icons">
               {item.is_pinned && <Pin size={13} />}
               {muted && <BellOff size={13} />}
-              {item.unread_count > 0 && <span className={`badge ${muted ? "badge--muted" : ""}`}>{item.unread_count > 99 ? "99+" : item.unread_count}</span>}
-              <button className="icon-btn" style={{ width: 24, height: 24 }} aria-label="Chat options" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.right, y: r.bottom }); }}>
+              {item.unread_count > 0 ? (
+                <span className={`badge ${muted ? "badge--muted" : ""}`}>{item.unread_count > 99 ? "99+" : item.unread_count}</span>
+              ) : (
+                item.last_message && item.last_message.sender_id === meId && !item.last_message.deleted_at && item.last_message.type !== "SYSTEM" && (
+                  <span className="row-tick"><StatusIcon status={item.last_message.status ?? "sent"} size={17} /></span>
+                )
+              )}
+              <button className="icon-btn row-more" style={{ width: 24, height: 24 }} aria-label="Chat options" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.right, y: r.bottom }); }}>
                 <MoreHorizontal size={16} />
               </button>
             </span>

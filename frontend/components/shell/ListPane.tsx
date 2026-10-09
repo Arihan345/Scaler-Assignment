@@ -1,8 +1,8 @@
 "use client";
-import { Archive, Search, SquarePen, UserPlus } from "lucide-react";
+import { Archive, ListFilter, MoreHorizontal, Search, SquarePen, UserPlus, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { convTitle, previewText } from "@/lib/format";
 import { useContacts, useConversationList, useUserSearch } from "@/lib/hooks";
@@ -15,6 +15,7 @@ import { NewChatModal } from "@/components/dialogs/NewChatModal";
 import { SettingsNav } from "@/components/shell/SettingsNav";
 import { Avatar } from "@/components/ui/Avatar";
 import { IconButton } from "@/components/ui/Button";
+import { Menu } from "@/components/ui/Menu";
 import { EmptyState, ErrorState } from "@/components/ui/EmptyState";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { OPEN_NEW_CHAT } from "./useShortcuts";
@@ -28,7 +29,7 @@ function useDebounced<T>(v: T, ms: number) {
 export function ListPane() {
   const pathname = usePathname();
   if (pathname.startsWith("/settings") || pathname.startsWith("/webhooks")) return <aside className="list-pane"><SettingsNav /></aside>;
-  return <aside className="list-pane"><ChatList /></aside>;
+  return <aside className="list-pane"><Suspense fallback={null}><ChatList /></Suspense></aside>;
 }
 
 function ChatList() {
@@ -38,7 +39,8 @@ function ChatList() {
   const me = useAuth((s) => s.user);
   const [q, setQ] = useState("");
   const [unreadOnly, setUnreadOnly] = useState(false);
-  const [archived, setArchived] = useState(false);
+  const params = useSearchParams();
+  const archived = params.get("archived") === "1";
   const [newChat, setNewChat] = useState(false);
   const dq = useDebounced(q, 250);
   const list = useConversationList(archived);
@@ -95,20 +97,27 @@ function ChatList() {
   return (
     <>
       <div className="list-header">
-        <h1>{archived ? "Archived" : "Chats"}</h1>
-        <IconButton label={archived ? "Back to chats" : "Archived chats"} onClick={() => setArchived((a) => !a)}><Archive size={20} /></IconButton>
-        <IconButton label="New chat (Ctrl+N)" onClick={() => setNewChat(true)}><SquarePen size={20} /></IconButton>
+        <h1>{archived ? "Archived chats" : "Chats"}</h1>
+        <IconButton label="New chat (Ctrl+N)" onClick={() => setNewChat(true)}><SquarePen size={22} /></IconButton>
+        <Menu trigger={<span className="icon-btn" role="button" aria-label="More options" tabIndex={0}><MoreHorizontal size={22} /></span>} items={[
+          archived
+            ? { label: "Back to chats", icon: <X size={16} />, onClick: () => router.push("/") }
+            : { label: "Archived chats", icon: <Archive size={16} />, onClick: () => router.push("/?archived=1") },
+          { label: "Settings", onClick: () => router.push("/settings") },
+        ]} />
       </div>
-      <div className="search">
-        <Search size={16} />
-        <input id="chat-search" type="search" placeholder="Search (Ctrl+K)" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search chats and contacts" />
-      </div>
-      {!archived && (
-        <div className="chips">
-          <button className={`chip ${!unreadOnly ? "is-on" : ""}`} onClick={() => setUnreadOnly(false)}>All</button>
-          <button className={`chip ${unreadOnly ? "is-on" : ""}`} onClick={() => setUnreadOnly(true)}>Unread</button>
+      <div className="search-row">
+        <div className="search">
+          <Search size={18} />
+          <input id="chat-search" type="search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search chats and contacts (Ctrl+K)" />
         </div>
-      )}
+        {!archived && (
+          <Menu trigger={<span className={`icon-btn ${unreadOnly ? "is-on" : ""}`} role="button" aria-label="Filter chats" tabIndex={0}><ListFilter size={22} /></span>} items={[
+            { label: unreadOnly ? "Show all chats" : "Show unread chats only", onClick: () => setUnreadOnly((u) => !u) },
+          ]} />
+        )}
+      </div>
+      {unreadOnly && !archived && <div className="filter-note">Showing unread chats <button onClick={() => setUnreadOnly(false)}>Clear</button></div>}
       <div className="list-scroll">
         {list.isLoading ? (
           <ListSkeleton />
@@ -132,8 +141,8 @@ function ChatList() {
               </div>
             ))}
             {rows.length === 0 && people.length === 0 && (
-              <EmptyState title={term ? "No results" : unreadOnly ? "No unread chats" : archived ? "No archived chats" : "No chats yet"}>
-                {term ? `Nothing matches “${q}”.` : !unreadOnly && !archived ? "Start a conversation with the compose button above." : undefined}
+              <EmptyState title={term ? "No results" : unreadOnly ? "No unread chats" : archived ? "No archived chats" : "No chats"}>
+                {term ? `Nothing matches “${q}”.` : !unreadOnly && !archived ? "Recent chats will appear here." : undefined}
               </EmptyState>
             )}
           </>

@@ -2,7 +2,17 @@ def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+def phone_for(name: str) -> str:
+    """Stable fake phone number for a test persona like "alice" (login is phone-only)."""
+    import hashlib
+
+    n = int.from_bytes(hashlib.md5(name.encode()).digest()[:6], "big") % 10**10
+    return f"+91{n:010d}"
+
+
 def login(client, identifier: str, name: str | None = None) -> dict:
+    if not identifier.lstrip("+").isdigit():
+        identifier = phone_for(identifier)
     r = client.post("/api/auth/verify-otp", json={"identifier": identifier, "otp": "123456"})
     assert r.status_code == 200, r.text
     data = r.json()

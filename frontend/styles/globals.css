@@ -225,3 +225,89 @@ a { color: var(--blue); text-decoration: none; }
 .chat-search__snippet { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes flash { 0%, 60% { background: var(--bg-selected); } 100% { background: transparent; } }
 .msg-row.is-flash { animation: flash 1.6s ease-out; border-radius: 12px; }
+
+/* read receipts: read ticks are bright cyan so they stand apart from sent/delivered (grey-white) on the blue bubble */
+.bubble--out .bubble__meta svg { opacity: .8; }
+.bubble--out .bubble__meta .tick--read { color: #7ff0ff; opacity: 1; }
+.bubble--in .bubble__meta .tick--read { color: var(--blue); }
+
+/* ===== Signal Desktop fidelity pass (from reference screenshots) ===== */
+body { font-size: 15px; }
+.nav-rail { background: var(--bg-pane); gap: 10px; padding: 14px 0; }
+.nav-rail .icon-btn.nav-btn { width: 52px; height: 48px; border-radius: 12px; color: var(--text); }
+.nav-rail .icon-btn.nav-btn.is-active { background: var(--bg-hover); color: var(--text); }
+.nav-rail .icon-btn.nav-btn:hover { background: var(--bg-hover); }
+.list-header { padding: 16px 14px 8px 22px; gap: 4px; }
+.list-header h1 { font-size: 26px; font-weight: 700; }
+.list-header .icon-btn { width: 40px; height: 40px; color: var(--text); }
+.search-row { display: flex; align-items: center; gap: 4px; padding: 6px 14px 10px 14px; }
+.search-row .search { flex: 1; margin: 0; }
+.search-row .icon-btn { color: var(--text); width: 40px; height: 40px; }
+.search-row .icon-btn.is-on { color: var(--blue); }
+.search input { padding: 11px 12px 11px 38px; border-radius: 10px; font-size: 16px; }
+.search svg { top: 12px; left: 12px; }
+.filter-note { padding: 0 22px 8px; font-size: 13px; color: var(--text-secondary); }
+.filter-note button { color: var(--blue); margin-left: 6px; }
+.list-section { text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 700; color: var(--text); padding: 14px 22px 6px; }
+.conv-row { padding: 12px 14px; gap: 14px; border-radius: 14px; }
+.conv-row.is-active, .conv-row:hover { background: var(--bg-selected); }
+.conv-row__title { font-size: 17px; font-weight: 700; }
+.conv-row__preview { font-size: 15px; margin-top: 3px; }
+.conv-row__time { font-size: 13px; }
+.row-tick { display: inline-flex; color: var(--text-secondary); --tick-cut: var(--bg-pane); }
+.conv-row:hover .row-tick, .conv-row.is-active .row-tick { --tick-cut: var(--bg-selected); }
+.row-more { display: none; }
+.conv-row:hover .row-more { display: inline-flex; }
+.conv-row:hover .row-tick { display: none; }
+.conv-row:hover .conv-row__icons .badge { display: none; }
+.thread-header { padding: 12px 22px; min-height: 76px; gap: 10px; }
+.thread-header__title { font-size: 18px; font-weight: 700; }
+.thread-header__sub { font-size: 13px; }
+.thread-header .icon-btn { color: var(--text); width: 40px; height: 40px; }
+.timeline__inner { padding: 12px 28px 10px; }
+.intro-card { align-self: center; display: grid; justify-items: center; gap: 6px; text-align: center; border: 1px solid var(--border); border-radius: 28px; padding: 22px 56px; margin: 18px 0 6px; }
+.intro-card h2 { font-size: 20px; }
+.bubble { display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 12px; font-size: 16px; padding: 9px 14px 7px; border-radius: 20px; }
+.bubble > * { max-width: 100%; }
+.bubble__sender, .reply-quote, .reactions, .bubble__failed, .bubble__img, .bubble__file { flex-basis: 100%; }
+.bubble__meta { margin-left: auto; margin-top: 0; opacity: .85; gap: 5px; font-size: 12px; padding-top: 4px; }
+.bubble--media .bubble__meta { flex-basis: 100%; }
+.bubble--out { --tick-cut: var(--bubble-out); }
+.bubble--in { --tick-cut: var(--bubble-in); }
+.bubble--in .bubble__meta { color: var(--text-secondary); opacity: 1; }
+.msg-actions .icon-btn { color: var(--text-secondary); width: 32px; height: 32px; }
+.date-sep { font-size: 14px; font-weight: 500; }
+.composer { padding: 6px 18px 16px; }
+.composer__row { align-items: center; gap: 8px; }
+.composer textarea { font-size: 16px; padding: 12px 18px; border-radius: 24px; }
+.composer .icon-btn { color: var(--text); width: 42px; height: 42px; }
+.composer__send { width: 42px; height: 42px; }
+.menu { min-width: 240px; padding: 8px; border-radius: 14px; }
+.menu__item { padding: 10px 12px; font-size: 15px; gap: 14px; }
+.welcome { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; color: var(--text); position: relative; }
+.welcome svg { margin-bottom: 14px; }
+.welcome h2 { font-size: 22px; }
+.welcome p { margin: 0; color: var(--text-secondary); }
+.welcome footer { position: absolute; bottom: 22px; font-size: 14px; color: var(--text-secondary); }
+@media (max-width: 1000px) { :root { --list-w: 340px; --nav-w: 64px; } .nav-rail .icon-btn.nav-btn { width: 44px; } }
+@media (max-width: 760px) { .nav-rail .icon-btn.nav-btn { width: 52px; height: 44px; } .conv-row { margin: 0 4px; width: calc(100% - 8px); } }
+
+/* ===== polish: no sideways scroll, calmer buttons ===== */
+.app, .main-pane, .thread, .timeline-wrap { overflow-x: hidden; }
+.timeline { overflow-x: hidden; }
+.react-picker { position: absolute; bottom: calc(100% + 6px); display: flex; gap: 2px; padding: 6px 8px; background: var(--bg-pane); border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--shadow); z-index: 20; white-space: nowrap; }
+.react-picker--out { right: 0; }
+.react-picker--in { left: 0; }
+.react-picker button { font-size: 22px; line-height: 1; width: 36px; height: 36px; border-radius: 50%; }
+.react-picker button:hover { background: var(--bg-hover); transform: scale(1.12); }
+.icon-btn { width: 40px; height: 40px; transition: background .12s, color .12s; }
+.icon-btn:active:not(:disabled) { transform: scale(.94); }
+.btn { padding: 10px 20px; border-radius: 10px; font-weight: 600; transition: background .12s; }
+.btn--secondary { background: var(--bg-hover); }
+.btn--secondary:hover:not(:disabled) { background: var(--bg-selected); }
+.msg-actions { gap: 0; background: var(--bg-pane); border-radius: 20px; padding: 0 2px; border: 1px solid var(--border); }
+.msg-actions .icon-btn { width: 34px; height: 34px; }
+.composer__send { transition: filter .12s; }
+.composer__send:hover:not(:disabled) { filter: brightness(1.1); }
+.nav-rail .icon-btn.nav-btn { width: 48px; height: 48px; }
+.modal__footer .btn { min-width: 96px; }

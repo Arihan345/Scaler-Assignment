@@ -12,6 +12,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
 import { SETTINGS_SECTIONS } from "@/components/shell/SettingsNav";
+import { ContactsSettings } from "@/components/dialogs/ContactsSettings";
 
 function Placeholder({ rows }: { rows: [string, string, boolean][] }) {
   return (
@@ -73,6 +74,7 @@ export default function SettingsSection() {
             </div>
           </>
         )}
+        {section === "contacts" && <ContactsSettings />}
         {section === "appearance" && (
           <div className="setting-row">
             <div>Theme<small>Choose light, dark, or follow your system.</small></div>

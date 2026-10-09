@@ -4,14 +4,14 @@ import { ArrowDown, Lock } from "lucide-react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { retrySend } from "@/lib/actions";
-import { dayKey, dayLabel, systemText } from "@/lib/format";
+import { convTitle, dayKey, dayLabel, systemText } from "@/lib/format";
 import { keys, markDeleted, mergeOlder, removeMessages } from "@/lib/query";
 import { scheduleRead } from "@/lib/realtime";
 import { computeStatus } from "@/lib/status";
 import type { ConversationDetail, DisplayStatus, Message, MessagesPage, OutboxItem } from "@/lib/types";
 import { useUi } from "@/store/ui";
 import { Avatar } from "@/components/ui/Avatar";
-import { Modal } from "@/components/ui/Modal";
+import { ConfirmDialog } from "@/components/ui/Modal";
 import { ErrorState } from "@/components/ui/EmptyState";
 import { ThreadSkeleton } from "@/components/ui/Skeleton";
 import { MessageInfo } from "@/components/dialogs/MessageInfo";
@@ -100,15 +100,11 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
   }, [rows, atBottom, meId]);
 
   useEffect(() => {
-    const onVis = () => setVisible(document.visibilityState === "visible" && document.hasFocus());
+    const onVis = () => setVisible(document.visibilityState === "visible");
     onVis();
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", onVis);
-    window.addEventListener("blur", onVis);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", onVis);
-      window.removeEventListener("blur", onVis);
     };
   }, []);
 
@@ -234,7 +230,16 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
               {loadingOlder ? "Loading…" : "Load earlier messages"}
             </button>
           ) : (
-            <div className="enc-notice"><Lock size={14} /> Encryption is simulated in this demo. Messages are not actually end-to-end encrypted.</div>
+            <>
+              <div className="intro-card">
+                <Avatar id={detail.peer?.id ?? detail.id} name={convTitle(detail)} src={isGroup ? detail.avatar_url : detail.peer?.avatar_url} size={96} />
+                <h2>{convTitle(detail)}</h2>
+                <div className="muted">
+                  {isGroup ? `${detail.members.filter((m) => m.is_active && !m.user.is_bot).length} members` : detail.peer?.about || (detail.peer?.username ? `@${detail.peer.username}` : detail.peer?.phone_number)}
+                </div>
+              </div>
+              <div className="enc-notice"><Lock size={14} /> Encryption is simulated in this demo. Messages are not actually end-to-end encrypted.</div>
+            </>
           )}
           {rows.map((r, i) => {
             const m = r.msg;
@@ -262,7 +267,7 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
                     avatar={sender && <Avatar id={sender.id} name={sender.display_name} src={sender.avatar_url} size={28} />}
                     gap={!sameAsPrev && !newDay && !!prev}
                     onReply={(x) => useUi.getState().setReplyTo(convId, x)}
-                    onReact={react} onDelete={setToDelete} onInfo={setInfo} onForward={setForward} onEdit={(x) => useUi.getState().setEditing(convId, x)}
+                    onReact={react} onDelete={(x, scope) => (scope === "me" ? void hideForMe(x) : setToDelete(x))} onInfo={setInfo} onForward={setForward} onEdit={(x) => useUi.getState().setEditing(convId, x)}
                     onRetry={(cid) => retrySend(qc, convId, cid)} onJump={jumpToReply} onImage={setLightbox}
                   />
                 )}
@@ -283,17 +288,7 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
         </button>
       )}
       {toDelete && (
-        <Modal title="Delete message?" width={420} onClose={() => setToDelete(null)} footer={
-          <>
-            <button className="btn btn--secondary" onClick={() => setToDelete(null)}>Cancel</button>
-            <button className="btn btn--secondary" onClick={() => { void hideForMe(toDelete); setToDelete(null); }}>Delete for me</button>
-            {toDelete.sender_id === meId && <button className="btn btn--danger" onClick={() => { void doDelete(toDelete); setToDelete(null); }}>Delete for everyone</button>}
-          </>
-        }>
-          <p className="muted" style={{ margin: 0 }}>
-            “Delete for me” removes it only from your view.{toDelete.sender_id === meId ? " “Delete for everyone” replaces it with a deleted-message note for all members." : ""}
-          </p>
-        </Modal>
+        <ConfirmDialog title="Delete for everyone?" message="This message will be removed for everyone in the chat and replaced with a note that it was deleted." confirmLabel="Delete for everyone" danger onConfirm={() => doDelete(toDelete)} onClose={() => setToDelete(null)} />
       )}
       {forward && <ForwardModal message={forward} onClose={() => setForward(null)} />}
       {info && <MessageInfo message={info} onClose={() => setInfo(null)} />}

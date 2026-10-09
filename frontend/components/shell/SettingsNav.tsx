@@ -1,10 +1,11 @@
 "use client";
-import { Bell, ChevronLeft, Lock, MessageSquare, Monitor, Palette, User as UserIcon, Webhook } from "lucide-react";
+import { Bell, ChevronLeft, Lock, MessageSquare, Monitor, Palette, User as UserIcon, Users, Webhook } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export const SETTINGS_SECTIONS = [
   { id: "general", label: "General", icon: UserIcon },
+  { id: "contacts", label: "Contacts", icon: Users },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "chats", label: "Chats", icon: MessageSquare },
   { id: "notifications", label: "Notifications", icon: Bell },

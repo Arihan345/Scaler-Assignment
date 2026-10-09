@@ -15,15 +15,15 @@
   --border: #e5e5e7;
   --bubble-in: #e9e9eb;
   --bubble-in-text: #1b1b1b;
-  --bubble-out: #3a76f0;
+  --bubble-out: #2e5be8;
   --bubble-out-text: #ffffff;
   --danger: #d93025;
   --success: #1f9d55;
   --online: #2db84d;
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
   --radius-bubble: 18px;
-  --list-w: 360px;
-  --nav-w: 64px;
+  --list-w: 420px;
+  --nav-w: 76px;
 }
 :root[data-theme="dark"] {
   --bg: #1b1b1b;

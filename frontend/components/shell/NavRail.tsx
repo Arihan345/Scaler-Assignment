@@ -1,29 +1,49 @@
 "use client";
-import { MessageSquare, Settings } from "lucide-react";
+import { Archive, LogOut, Menu as MenuIcon, MessageCircle, Settings, Webhook } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { api } from "@/lib/api";
 import { useConversationList } from "@/lib/hooks";
 import { useAuth } from "@/store/auth";
-import { Avatar } from "@/components/ui/Avatar";
+import { Menu } from "@/components/ui/Menu";
 
 export function NavRail() {
   const pathname = usePathname();
-  const user = useAuth((s) => s.user);
+  const router = useRouter();
+  const qc = useQueryClient();
+  const logout = useAuth((s) => s.logout);
   const { data } = useConversationList(false);
   const unread = (data ?? []).reduce((n, c) => n + (c.unread_count > 0 ? 1 : 0), 0);
-  const active = (p: string) => (p === "/" ? pathname === "/" || pathname.startsWith("/c/") : pathname.startsWith(p));
-  const item = (href: string, label: string, icon: React.ReactNode, badge?: number) => (
-    <Link key={href} href={href} className={`icon-btn ${active(href) ? "is-active" : ""}`} aria-label={label} title={label}>
-      {icon}
-      {!!badge && <span className="badge">{badge > 99 ? "99+" : badge}</span>}
-    </Link>
-  );
+  const chatsActive = pathname === "/" || pathname.startsWith("/c/");
+
+  async function signOut() {
+    try { await api.post("/auth/logout"); } catch { /* token may already be invalid */ }
+    logout();
+    qc.clear();
+    router.replace("/login");
+  }
+
   return (
     <nav className="nav-rail" aria-label="Main">
-      {item("/", "Chats", <MessageSquare size={22} />, unread)}
+      <Menu
+        align="left"
+        trigger={<span className="icon-btn nav-btn" role="button" aria-label="Menu" tabIndex={0}><MenuIcon size={24} /></span>}
+        items={[
+          { label: "Settings", icon: <Settings size={16} />, onClick: () => router.push("/settings") },
+          { label: "Archived chats", icon: <Archive size={16} />, onClick: () => router.push("/?archived=1") },
+          { label: "Webhooks", icon: <Webhook size={16} />, onClick: () => router.push("/webhooks") },
+          { label: "Log out", icon: <LogOut size={16} />, danger: true, separatorBefore: true, onClick: signOut },
+        ]}
+      />
+      <Link href="/" className={`icon-btn nav-btn ${chatsActive ? "is-active" : ""}`} aria-label="Chats" title="Chats">
+        <MessageCircle size={24} fill={chatsActive ? "currentColor" : "none"} />
+        {unread > 0 && <span className="badge">{unread > 99 ? "99+" : unread}</span>}
+      </Link>
       <div className="nav-rail__spacer" />
-      {item("/settings", "Settings", <Settings size={22} />)}
-      {user && <Link href="/settings/general" aria-label="Profile" className="icon-btn"><Avatar id={user.id} name={user.display_name} src={user.avatar_url} size={32} /></Link>}
+      <Link href="/settings" className={`icon-btn nav-btn ${pathname.startsWith("/settings") ? "is-active" : ""}`} aria-label="Settings" title="Settings">
+        <Settings size={24} />
+      </Link>
     </nav>
   );
 }

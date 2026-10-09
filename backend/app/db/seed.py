@@ -1,5 +1,5 @@
 """Idempotent demo data: runs only when the users table is empty, so a redeploy or a wiped disk
-never leaves a blank app. Demo logins use OTP 123456 (usernames: priya, rohan, ...)."""
+never leaves a blank app. Demo logins use OTP 123456 and a phone number (priya: +919810000001, rohan: +919810000002, ...)."""
 import random
 from datetime import timedelta
 

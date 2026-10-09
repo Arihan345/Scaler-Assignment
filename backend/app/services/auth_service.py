@@ -23,15 +23,13 @@ def verify_otp(db: DbSession, identifier: str, otp: str, device_label: str | Non
     if (otp or "").strip() != settings.fixed_otp:
         raise AppError("UNAUTHENTICATED", "Invalid verification code", 401)
 
-    column = User.phone_number if kind == "phone" else User.username
-    user = db.execute(select(User).where(column == value)).scalar_one_or_none()
+    user = db.execute(select(User).where(User.phone_number == value)).scalar_one_or_none()
     now = now_iso()
     if user is None:
         user = User(
             id=new_id(),
-            phone_number=value if kind == "phone" else None,
-            username=value if kind == "username" else None,
-            display_name=mask_phone(value) if kind == "phone" else value,  # placeholder until onboarding
+            phone_number=value,
+            display_name=mask_phone(value),  # placeholder until onboarding
             created_at=now,
         )
         db.add(user)

@@ -19,15 +19,16 @@ def hash_token(token: str) -> str:
 
 
 def normalize_identifier(raw: str) -> tuple[str, str]:
-    """Return ("phone", "+919...") or ("username", "priya"). Raises VALIDATION otherwise."""
-    value = (raw or "").strip()
-    compact = re.sub(r"[\s\-()]", "", value)
+    """Login is phone-number only. Returns ("phone", "+919...").
+
+    A bare 10-digit number is assumed to be Indian (+91); anything else needs its country code.
+    Raises VALIDATION for anything that isn't a phone number."""
+    compact = re.sub(r"[\s\-()]", "", (raw or "").strip())
+    if re.fullmatch(r"\d{10}", compact):
+        return "phone", f"+91{compact}"
     if _PHONE_RE.match(compact):
         return "phone", compact if compact.startswith("+") else f"+{compact}"
-    lowered = value.lower().lstrip("@")
-    if _USERNAME_RE.match(lowered):
-        return "username", lowered
-    raise validation("Enter a phone number (10-15 digits) or a username (3-24 letters, digits or _)")
+    raise validation("Enter a valid phone number (10 digits, or include your country code)")
 
 
 def mask_phone(phone: str) -> str:

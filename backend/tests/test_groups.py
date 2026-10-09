@@ -1,6 +1,6 @@
 from app.db import engine
 from app.db.models import ConversationMember
-from tests.helpers import direct, login, make_group, messages, send
+from tests.helpers import direct, login, make_group, messages, phone_for, send
 
 
 def users(client, *names):
@@ -143,8 +143,8 @@ def test_empty_direct_chats_stay_out_of_the_list(client):
 
 def test_contacts_and_user_search(client):
     a, b = users(client, "alice", "bob")
-    assert client.post("/api/contacts", json={"identifier": "bob"}, headers=a["h"]).status_code == 201
-    assert client.post("/api/contacts", json={"identifier": "nobody1"}, headers=a["h"]).status_code == 404
+    assert client.post("/api/contacts", json={"identifier": phone_for("bob")}, headers=a["h"]).status_code == 201
+    assert client.post("/api/contacts", json={"identifier": "+919800000000"}, headers=a["h"]).status_code == 404
     assert [c["display_name"] for c in client.get("/api/contacts", headers=a["h"]).json()] == ["Bob"]
     found = client.get("/api/users/search", params={"q": "bo"}, headers=a["h"]).json()
     assert found[0]["display_name"] == "Bob" and found[0]["is_contact"] is True

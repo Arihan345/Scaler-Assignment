@@ -1,11 +1,12 @@
 "use client";
-import { AlertCircle, Check, CheckCheck, Clock, Copy, FileText, Forward, Info, MoreHorizontal, Pencil, Reply, Smile, Timer, Trash2 } from "lucide-react";
+import { Copy, FileText, Forward, Info, MoreHorizontal, Pencil, Reply, SmilePlus, Timer, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { clock, formatBytes } from "@/lib/format";
 import { colorFor } from "@/lib/colors";
 import { downloadAttachment, useAuthedMedia } from "@/lib/media";
 import type { Attachment, DisplayStatus, Message, OutboxItem } from "@/lib/types";
 import { MenuPopup, type MenuItem } from "@/components/ui/Menu";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 
 const QUICK = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -22,7 +23,7 @@ export type BubbleProps = {
   meId: string;
   onReply: (m: Message) => void;
   onReact: (m: Message, emoji: string) => void;
-  onDelete: (m: Message) => void;
+  onDelete: (m: Message, scope: "me" | "all") => void;
   onEdit: (m: Message) => void;
   onForward: (m: Message) => void;
   onInfo: (m: Message) => void;
@@ -30,16 +31,6 @@ export type BubbleProps = {
   onJump: (id: number) => void;
   onImage: (url: string) => void;
 };
-
-function StatusIcon({ status }: { status: DisplayStatus }) {
-  switch (status) {
-    case "sending": return <Clock size={12} aria-label="Sending" />;
-    case "failed": return <AlertCircle size={12} aria-label="Failed" />;
-    case "sent": return <Check size={13} aria-label="Sent" />;
-    case "delivered": return <CheckCheck size={13} aria-label="Delivered" />;
-    case "read": return <CheckCheck size={13} strokeWidth={3} aria-label="Read" />;
-  }
-}
 
 function ImageAttachment({ att, onOpen }: { att: Attachment; onOpen: (url: string) => void }) {
   const { url, error } = useAuthedMedia(att.id);
@@ -61,20 +52,20 @@ export function MessageBubble(p: BubbleProps) {
 
   const canEdit = mine && !pending && !deleted && !!msg.body && Date.now() - new Date(msg.created_at).getTime() < 3 * 3600_000;
   const items: MenuItem[] = [
-    { label: "Reply", icon: <Reply size={16} />, onClick: () => p.onReply(msg) },
     { label: "Forward", icon: <Forward size={16} />, hidden: !msg.body, onClick: () => p.onForward(msg) },
     { label: "Copy text", icon: <Copy size={16} />, hidden: !msg.body, onClick: () => navigator.clipboard?.writeText(msg.body ?? "") },
     { label: "Edit", icon: <Pencil size={16} />, hidden: !canEdit, onClick: () => p.onEdit(msg) },
     { label: "Message info", icon: <Info size={16} />, hidden: !mine, onClick: () => p.onInfo(msg) },
-    { label: "Delete", icon: <Trash2 size={16} />, danger: true, separatorBefore: true, onClick: () => p.onDelete(msg) },
+    { label: "Delete for me", icon: <Trash2 size={16} />, separatorBefore: true, onClick: () => p.onDelete(msg, "me") },
+    { label: "Delete for everyone", icon: <Trash2 size={16} />, danger: true, hidden: !mine, onClick: () => p.onDelete(msg, "all") },
   ];
   const canAct = !pending && !deleted;
 
   const actions = canAct && (
     <div className="msg-actions">
-      <button className="icon-btn" aria-label="React" onClick={() => setReact((v) => !v)}><Smile size={16} /></button>
-      <button className="icon-btn" aria-label="Reply" onClick={() => p.onReply(msg)}><Reply size={16} /></button>
-      <button className="icon-btn" aria-label="More" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom }); }}><MoreHorizontal size={16} /></button>
+      <button className="icon-btn" aria-label="More" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom }); }}><MoreHorizontal size={18} /></button>
+      <button className="icon-btn" aria-label="Reply" onClick={() => p.onReply(msg)}><Reply size={18} /></button>
+      <button className="icon-btn" aria-label="React" onClick={() => setReact((v) => !v)}><SmilePlus size={18} /></button>
     </div>
   );
 
@@ -84,7 +75,7 @@ export function MessageBubble(p: BubbleProps) {
       {actions}
       <div className={`bubble bubble--${mine ? "out" : "in"} ${mediaOnly ? "bubble--media" : ""}`} style={{ position: "relative" }}>
         {react && (
-          <div className="emoji-pop" style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, gridTemplateColumns: "repeat(6,auto)", whiteSpace: "normal" }}>
+          <div className={`react-picker react-picker--${mine ? "out" : "in"}`}>
             {QUICK.map((e) => <button key={e} onClick={() => { setReact(false); p.onReact(msg, e); }}>{e}</button>)}
           </div>
         )}
@@ -111,6 +102,12 @@ export function MessageBubble(p: BubbleProps) {
             {msg.body && <span>{msg.body}</span>}
           </>
         )}
+        <div className="bubble__meta">
+          {msg.expires_at && !deleted && <Timer size={12} aria-label="Disappearing message" />}
+          {msg.edited_at && !deleted && <span>Edited</span>}
+          <span>{clock(msg.created_at)}</span>
+          {mine && !deleted && <StatusIcon status={p.status} size={16} />}
+        </div>
         {!deleted && msg.reactions.length > 0 && (
           <div className="reactions">
             {msg.reactions.map((r) => (
@@ -120,12 +117,6 @@ export function MessageBubble(p: BubbleProps) {
             ))}
           </div>
         )}
-        <div className="bubble__meta">
-          {msg.expires_at && !deleted && <Timer size={11} aria-label="Disappearing message" />}
-          {msg.edited_at && !deleted && <span>Edited</span>}
-          <span>{clock(msg.created_at)}</span>
-          {mine && !deleted && <StatusIcon status={p.status} />}
-        </div>
         {p.status === "failed" && pending && (
           <div className="bubble__failed" role="alert">
             Failed to send. <button style={{ textDecoration: "underline" }} onClick={() => p.onRetry(pending.client_message_id)}>Retry</button>

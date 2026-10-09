@@ -23,7 +23,8 @@ export default function LoginPage() {
 
   async function requestOtp(e?: React.FormEvent, id = identifier) {
     e?.preventDefault();
-    if (!id.trim()) return setError("Enter your phone number or username");
+    const digits = id.replace(/[\s\-()+]/g, "");
+    if (!/^\d{10,15}$/.test(digits)) return setError("Enter a valid phone number (10 digits, or include your country code)");
     setBusy(true);
     setError("");
     try {
@@ -79,17 +80,17 @@ export default function LoginPage() {
         {step === "id" ? (
           <form onSubmit={requestOtp} style={{ display: "grid", gap: 16 }}>
             <h1>Welcome to Signal</h1>
-            <p className="muted" style={{ textAlign: "center", margin: 0 }}>Enter your phone number or username to continue.</p>
+            <p className="muted" style={{ textAlign: "center", margin: 0 }}>Enter your phone number to continue.</p>
             <div className="field">
-              <label htmlFor="identifier">Phone number or username</label>
-              <input id="identifier" autoFocus value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="+91 98100 00001 or priya" autoComplete="username" />
+              <label htmlFor="identifier">Phone number</label>
+              <input id="identifier" type="tel" inputMode="tel" autoFocus value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="98100 00001 or +91 98100 00001" autoComplete="tel" />
               {error && <span className="field__error" role="alert">{error}</span>}
             </div>
             <Button variant="primary" type="submit" loading={busy}>Continue</Button>
             <div className="demo-hint">Demo mode: use code <b>123456</b>. No SMS is sent.</div>
             <div className="demo-chips">
-              {["priya", "rohan"].map((u) => (
-                <Button key={u} type="button" onClick={() => requestOtp(undefined, u)}>Sign in as {u}</Button>
+              {[["Priya", "+919810000001"], ["Rohan", "+919810000002"]].map(([n, phone]) => (
+                <Button key={n} type="button" onClick={() => requestOtp(undefined, phone)}>Sign in as {n}</Button>
               ))}
             </div>
           </form>

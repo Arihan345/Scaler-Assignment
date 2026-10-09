@@ -6,10 +6,10 @@ A Signal Messenger–style chat app: Next.js (TypeScript) frontend, FastAPI + SQ
 > Any lock icons, "safety numbers" and encryption notices are visual only and say so in the UI.
 
 ## Demo accounts
-Sign in with a username or phone number, then enter code `123456`.
-Seeded users: `priya` and `rohan` (with existing chats, groups and ~300 messages), plus ananya, karan, meera, vikram and others.
-Open two browsers (or one normal and one private window) as `priya` and `rohan` to see real-time delivery, read receipts, typing and presence.
-Any new identifier signs up a new user and goes through onboarding (name, about, avatar).
+Login is by phone number only, then code `123456` (a bare 10-digit number is treated as +91).
+Seeded users: Priya `+919810000001` and Rohan `+919810000002` (with existing chats, groups and ~300 messages), plus ananya, karan, meera, vikram and others.
+Open two browsers (or one normal and one private window) as Priya and Rohan (the login page has one-click buttons) to see real-time delivery, read receipts, typing and presence.
+Any new phone number signs up a new user and goes through onboarding (name, about, avatar).
 
 ## Run locally
 ```bash
@@ -29,7 +29,7 @@ npm run typecheck && npm test
 ```
 
 ## Features
-- Mock OTP login/logout, persistent sessions, onboarding with profile photo
+- Mock OTP login/logout (phone number only), persistent sessions, onboarding with profile photo
 - Chat list sorted by activity, unread badges, last-message preview, pin/mute/archive, search over chats and people, contacts
 - Real-time direct and group messaging, typing indicators, online/last-seen
 - Sent / delivered / read ticks (per-member cursors; group status = slowest eligible recipient)
