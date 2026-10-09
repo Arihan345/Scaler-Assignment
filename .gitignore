@@ -1,0 +1,17 @@
+node_modules/
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/data/
+backend/uploads/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.local
+.DS_Store

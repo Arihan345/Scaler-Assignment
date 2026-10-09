@@ -1,0 +1,25 @@
+# Render blueprint for the backend. The frontend deploys separately on Vercel (root directory: frontend).
+services:
+  - type: web
+    name: signal-clone-api
+    runtime: python
+    rootDir: backend
+    plan: free            # free tier sleeps after idle and has an ephemeral disk; see README "Deployment"
+    buildCommand: pip install -r requirements.txt
+    # One worker on purpose: presence, typing and WS tickets live in process memory.
+    # --no-access-log keeps single-use WebSocket tickets (in the URL) out of logs.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: ENV
+        value: prod
+      - key: FIXED_OTP
+        value: "123456"
+      - key: DATABASE_URL
+        value: sqlite:////tmp/signal.db     # with a paid persistent disk, use e.g. sqlite:////var/data/signal.db
+      - key: UPLOAD_DIR
+        value: /tmp/uploads                 # likewise /var/data/uploads on a persistent disk
+      - key: CORS_ORIGINS
+        value: https://YOUR-APP.vercel.app  # set to your Vercel URL
