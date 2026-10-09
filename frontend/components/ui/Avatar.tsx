@@ -1,5 +1,5 @@
 "use client";
-import { Bookmark } from "lucide-react";
+import { FileText } from "lucide-react";
 import { useState } from "react";
 import { mediaUrl } from "@/lib/api";
 import { colorFor } from "@/lib/colors";
@@ -13,8 +13,8 @@ export function Avatar({ name, id, src, size = 48, online, note }: Props) {
   const showImg = !!url && !broken;
   if (note) {
     return (
-      <span className="avatar" style={{ width: size, height: size, background: "var(--blue)" }} aria-hidden="true">
-        <Bookmark size={Math.round(size * 0.46)} fill="currentColor" />
+      <span className="avatar avatar--note" style={{ width: size, height: size }} aria-hidden="true">
+        <FileText size={Math.round(size * 0.5)} />
       </span>
     );
   }

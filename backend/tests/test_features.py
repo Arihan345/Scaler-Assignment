@@ -212,7 +212,7 @@ def test_message_request_hidden_until_accepted_and_no_read_receipt(client):
     assert client.post(f"/api/conversations/{conv}/request/accept", headers=b["h"]).status_code == 200
     assert [c["id"] for c in client.get("/api/conversations", headers=b["h"]).json()] == [conv]
     client.post(f"/api/conversations/{conv}/read", json={"up_to_seq": m["seq"]}, headers=b["h"])
-    assert messages(client, a, conv)["messages"][-1]["status"] == "read"
+    assert messages(client, a, conv)["messages"][-2]["status"] == "read"
 
 
 def test_message_request_skipped_for_contacts_and_reply_accepts_and_delete_archives(client):
@@ -308,3 +308,37 @@ def test_sessions_list_and_unlink(client):
     assert client.delete(f"/api/auth/sessions/{other['id']}", headers=a["h"]).status_code == 200
     assert client.get("/api/users/me", headers=h2).status_code == 401  # the unlinked device is signed out
     assert len(client.get("/api/auth/sessions", headers=a["h"]).json()) == 1
+
+
+def test_call_history_lists_my_calls(client):
+    from tests.helpers import direct, login
+    a, b = login(client, "+15550000001"), login(client, "+15550000002")
+    conv = direct(client, a, b)
+    from app.db.engine import session_scope
+    from app.services import message_service
+    from app.core.time import now_iso
+    import json
+    with session_scope() as db:
+        message_service.insert_message(db, conv, None, now_iso(), "SYSTEM", None, system_event=json.dumps({"kind": "call", "video": True, "outcome": "missed", "duration": 0, "actor": a["id"]}))
+        db.commit()
+    mine = client.get("/api/calls", headers=a["h"]).json()
+    theirs = client.get("/api/calls", headers=b["h"]).json()
+    assert len(mine) == 1 and mine[0]["outgoing"] and mine[0]["video"] and mine[0]["outcome"] == "missed"
+    assert len(theirs) == 1 and not theirs[0]["outgoing"]
+
+
+def test_groups_in_common_counts_shared_groups(client):
+    a, b = two(client)
+    conv = direct(client, a, b)
+    assert client.get(f"/api/conversations/{conv}", headers=a["h"]).json()["groups_in_common"] == 0
+    make_group(client, a, [b])
+    assert client.get(f"/api/conversations/{conv}", headers=a["h"]).json()["groups_in_common"] == 1
+
+
+def test_accepting_a_request_adds_an_accepted_line(client):
+    a, b = two(client)
+    conv = _raw_direct(client, a, b)
+    send(client, a, conv, "hey")
+    client.post(f"/api/conversations/{conv}/request/accept", headers=b["h"])
+    last = messages(client, b, conv)["messages"][-1]
+    assert last["type"] == "SYSTEM" and last["system_event"] == {"kind": "request_accepted", "actor": b["id"]}

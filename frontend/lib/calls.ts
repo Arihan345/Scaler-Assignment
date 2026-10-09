@@ -1,6 +1,7 @@
 "use client";
 // 1:1 voice/video calls over WebRTC. The backend only relays signaling (invite/accept/offer/answer/ICE) through the
 // existing WebSocket; media flows peer-to-peer. State lives in a small Zustand store so the overlay can render it.
+import { usePrefs } from "@/store/prefs";
 import { create } from "zustand";
 import type { User } from "./types";
 import { useUi } from "@/store/ui";
@@ -132,6 +133,7 @@ export async function handleCallEvent(event: string, p: Record<string, any>, con
   switch (event) {
     case "call.incoming":
       if (s.phase !== "idle") return;
+      if (!usePrefs.getState().incomingCalls) { send({ event: "call.decline", call_id: p.call_id }); return; } // "Enable incoming calls" is off
       useCall.setState({ ...IDLE, phase: "incoming", callId: p.call_id, conversationId: convId, peer: p.caller, video: !!p.video });
       startRing();
       if (document.visibilityState !== "visible" && typeof Notification !== "undefined" && Notification.permission === "granted") {

@@ -1,5 +1,5 @@
 "use client";
-import { Archive, ListFilter, MoreHorizontal, Search, SquarePen, UserPlus, X, MailQuestion } from "lucide-react";
+import { Archive, ListFilter, MoreHorizontal, Search, Settings, SquarePen, UserPlus, X, MailQuestion } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -19,6 +19,7 @@ import { Menu } from "@/components/ui/Menu";
 import { EmptyState, ErrorState } from "@/components/ui/EmptyState";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { StoriesPane } from "@/components/stories/StoriesPane";
+import { CallsPane } from "@/components/shell/CallsPane";
 import { OPEN_NEW_CHAT } from "./useShortcuts";
 
 function useDebounced<T>(v: T, ms: number) {
@@ -30,6 +31,7 @@ function useDebounced<T>(v: T, ms: number) {
 export function ListPane() {
   const pathname = usePathname();
   if (pathname.startsWith("/settings") || pathname.startsWith("/webhooks")) return <aside className="list-pane"><SettingsNav /></aside>;
+  if (pathname.startsWith("/calls")) return <aside className="list-pane"><CallsPane /></aside>;
   if (pathname.startsWith("/stories")) return <aside className="list-pane"><StoriesPane /></aside>;
   return <aside className="list-pane"><Suspense fallback={null}><ChatList /></Suspense></aside>;
 }
@@ -99,30 +101,31 @@ function ChatList() {
     }
   }
 
+  if (newChat) return <NewChatModal onClose={() => setNewChat(false)} />;
+
   return (
     <>
       <div className="list-header">
+        {me && <button className="only-xs phone-avatar" aria-label="Settings" onClick={() => router.push("/settings")}><Avatar id={me.id} name={me.display_name} src={me.avatar_url} size={34} /></button>}
         <h1>{archived ? "Archived chats" : showRequests ? "Message requests" : "Chats"}</h1>
         <IconButton label="New chat (Ctrl+N)" onClick={() => setNewChat(true)}><SquarePen size={22} /></IconButton>
         <Menu trigger={<span className="icon-btn" role="button" aria-label="More options" tabIndex={0}><MoreHorizontal size={22} /></span>} items={[
           archived || showRequests
             ? { label: "Back to chats", icon: <X size={16} />, onClick: () => router.push("/") }
-            : { label: "Archived chats", icon: <Archive size={16} />, onClick: () => router.push("/?archived=1") },
-          { label: "Settings", onClick: () => router.push("/settings") },
+            : { label: "View Archive", icon: <Archive size={16} />, onClick: () => router.push("/?archived=1") },
+          { label: "Settings", icon: <Settings size={16} />, onClick: () => router.push("/settings") },
         ]} />
       </div>
       <div className="search-row">
         <div className="search">
           <Search size={18} />
-          <input id="chat-search" type="search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search chats and contacts (Ctrl+K)" />
+          <input id="chat-search" type="search" placeholder={unreadOnly ? "Search unread chats" : "Search"} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search chats and contacts (Ctrl+K)" />
         </div>
         {!archived && (
-          <Menu trigger={<span className={`icon-btn ${unreadOnly ? "is-on" : ""}`} role="button" aria-label="Filter chats" tabIndex={0}><ListFilter size={22} /></span>} items={[
-            { label: unreadOnly ? "Show all chats" : "Show unread chats only", onClick: () => setUnreadOnly((u) => !u) },
-          ]} />
+          <button className={`icon-btn ${unreadOnly ? "is-on" : ""}`} aria-label="Filter by unread" aria-pressed={unreadOnly} data-tip="Filter by unread" onClick={() => setUnreadOnly((u) => !u)}><ListFilter size={22} /></button>
         )}
       </div>
-      {unreadOnly && !archived && <div className="filter-note">Showing unread chats <button onClick={() => setUnreadOnly(false)}>Clear</button></div>}
+      {unreadOnly && !archived && <div className="filter-note filter-note--bold">Filtered by unread</div>}
       <div className="list-scroll">
         {list.isLoading ? (
           <ListSkeleton />
@@ -144,7 +147,7 @@ function ChatList() {
             {rows.map((c) => (
               <ConversationRow key={c.id} item={c} active={c.id === activeId} onOpen={() => router.push(`/c/${c.id}`)} />
             ))}
-            {term && people.length > 0 && <div className="list-section">People</div>}
+            {term && people.length > 0 && <div className="list-section">Contacts</div>}
             {people.map((u) => (
               <div key={u.id} className="conv-row" role="button" tabIndex={0} onClick={() => openPerson(u)} onKeyDown={(e) => e.key === "Enter" && openPerson(u)}>
                 <Avatar id={u.id} name={u.display_name} src={u.avatar_url} />
@@ -156,14 +159,14 @@ function ChatList() {
               </div>
             ))}
             {rows.length === 0 && people.length === 0 && (
-              <EmptyState title={term ? "No results" : unreadOnly ? "No unread chats" : archived ? "No archived chats" : showRequests ? "No message requests" : "No chats"}>
-                {term ? `Nothing matches “${q}”.` : !unreadOnly && !archived && !showRequests ? "Recent chats will appear here." : undefined}
+              <EmptyState title={term ? (unreadOnly ? `No results for "${q.trim()}" in unread chats` : "No results") : unreadOnly ? "No unread chats" : archived ? "No archived chats" : showRequests ? "No message requests" : "No chats"}>
+                {term ? (unreadOnly ? undefined : `Nothing matches “${q}”.`) : !unreadOnly && !archived && !showRequests ? "Recent chats will appear here." : undefined}
+                {unreadOnly && <div style={{ marginTop: 14 }}><button className="btn btn--secondary" onClick={() => setUnreadOnly(false)}>Clear filter</button></div>}
               </EmptyState>
             )}
           </>
         )}
       </div>
-      {newChat && <NewChatModal onClose={() => setNewChat(false)} />}
     </>
   );
 }

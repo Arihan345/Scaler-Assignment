@@ -3,6 +3,7 @@ import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { acceptCall, declineCall, hangUp, toggleCamera, toggleMute, useCall } from "@/lib/calls";
 import { mmss } from "@/lib/format";
+import { useAuth } from "@/store/auth";
 import { Avatar } from "@/components/ui/Avatar";
 
 function StreamVideo({ stream, muted, className }: { stream: MediaStream | null; muted?: boolean; className?: string }) {
@@ -14,6 +15,7 @@ function StreamVideo({ stream, muted, className }: { stream: MediaStream | null;
 /** Incoming-call prompt and the in-call screen. Mounted once in the app shell. */
 export function CallOverlay() {
   const c = useCall();
+  const me = useAuth((s) => s.user)!;
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (c.phase !== "active") return;
@@ -27,8 +29,8 @@ export function CallOverlay() {
   if (c.phase === "incoming") {
     return (
       <div className="call-incoming" role="alertdialog" aria-label={`Incoming ${kind.toLowerCase()} from ${name}`}>
-        <Avatar id={c.peer.id} name={name} src={c.peer.avatar_url} size={56} />
-        <div className="call-incoming__text"><b>{name}</b><span>Incoming {kind.toLowerCase()}…</span></div>
+        <Avatar id={c.peer.id} name={name} src={c.peer.avatar_url} size={44} />
+        <div className="call-incoming__text"><b>{name}</b><span>Incoming {kind.toLowerCase()}</span></div>
         <button className="call-btn call-btn--red" aria-label="Decline call" onClick={declineCall}><PhoneOff size={22} /></button>
         <button className="call-btn call-btn--green" aria-label="Accept call" onClick={() => void acceptCall()}>{c.video ? <Video size={22} /> : <Phone size={22} />}</button>
       </div>
@@ -41,12 +43,15 @@ export function CallOverlay() {
       {c.video && c.remote && c.phase === "active" ? <StreamVideo stream={c.remote} className="call-remote" /> : (
         <div className="call-avatar"><Avatar id={c.peer.id} name={name} src={c.peer.avatar_url} size={120} />{c.remote && <StreamVideo stream={c.remote} className="call-audio" />}</div>
       )}
-      <div className="call-info"><b>{name}</b><span>{status}</span></div>
       {c.video && c.local && <StreamVideo stream={c.local} muted className={`call-local ${c.camOff ? "is-off" : ""}`} />}
-      <div className="call-controls">
-        <button className={`call-btn ${c.muted ? "is-on" : ""}`} aria-label={c.muted ? "Unmute microphone" : "Mute microphone"} onClick={toggleMute}>{c.muted ? <MicOff size={22} /> : <Mic size={22} />}</button>
-        {c.video && <button className={`call-btn ${c.camOff ? "is-on" : ""}`} aria-label={c.camOff ? "Turn camera on" : "Turn camera off"} onClick={toggleCamera}>{c.camOff ? <VideoOff size={22} /> : <Video size={22} />}</button>}
-        <button className="call-btn call-btn--red" aria-label="End call" onClick={hangUp}><PhoneOff size={22} /></button>
+      {!c.video && <div className="call-self"><Avatar id={me.id} name={me.display_name} src={me.avatar_url} size={44} />{c.muted && <MicOff size={14} className="call-self__off" />}</div>}
+      <div className="call-bar">
+        <div className="call-bar__who"><b>{name}</b><span>{status}</span></div>
+        <div className="call-bar__btns">
+          <button className={`call-btn call-btn--sm ${c.camOff || !c.video ? "is-on" : ""}`} title={c.camOff || !c.video ? "Turn camera on" : "Turn camera off"} aria-label={c.camOff ? "Turn camera on" : "Turn camera off"} onClick={toggleCamera} disabled={!c.video}>{c.camOff || !c.video ? <VideoOff size={20} /> : <Video size={20} />}</button>
+          <button className={`call-btn call-btn--sm ${c.muted ? "is-on" : ""}`} title={c.muted ? "Unmute" : "Mute"} aria-label={c.muted ? "Unmute microphone" : "Mute microphone"} onClick={toggleMute}>{c.muted ? <MicOff size={20} /> : <Mic size={20} />}</button>
+        </div>
+        <button className="call-end" aria-label="End call" onClick={hangUp}>End</button>
       </div>
     </div>
   );

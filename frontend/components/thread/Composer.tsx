@@ -1,6 +1,7 @@
 "use client";
+import { EmojiPicker } from "./EmojiPicker";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Mic, Paperclip, Plus, Send, Smile, Trash2, UserCheck, X } from "lucide-react";
+import { Check, File as FileIcon, Image as ImageIcon, Mic, Paperclip, Plus, Send, Smile, Trash2, UserCheck, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { PendingAttachment, sendMessage } from "@/lib/actions";
@@ -12,10 +13,10 @@ import { useUi } from "@/store/ui";
 import { usePrefs } from "@/store/prefs";
 import { mmss } from "@/lib/format";
 import { useSocket } from "@/components/shell/SocketProvider";
+import { Menu } from "@/components/ui/Menu";
 import { IconButton } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 
-const EMOJI = ["😀","😂","😊","😍","😘","😎","🤔","😢","😭","😡","👍","👎","🙏","👏","🎉","🔥","❤️","💯","✅","👀","🙌","😅","🤝","🥳"];
 const draftKey = (id: string) => `signal.draft.${id}`;
 function loadDraft(id: string): string {
   try { return localStorage.getItem(draftKey(id)) ?? ""; } catch { return ""; }
@@ -40,6 +41,7 @@ export function Composer({ convId, detail, canSend }: { convId: string; detail: 
   const [emoji, setEmoji] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const openPicker = (accept: string) => { if (picker.current) { picker.current.accept = accept; picker.current.click(); } };
   const sendWithEnter = usePrefs((s) => s.sendWithEnter);
   // @mentions (groups): the picker opens while typing "@name"; ids are remembered so the server knows who was mentioned.
   const mentioned = useRef(new Map<string, string>()); // user id -> display name
@@ -264,11 +266,17 @@ export function Composer({ convId, detail, canSend }: { convId: string; detail: 
         </div>
       )}
       {emoji && (
-        <div className="emoji-pop" role="dialog" aria-label="Emoji">
-          {EMOJI.map((e) => (
-            <button key={e} onClick={() => { onChange(text + e); area.current?.focus(); }}>{e}</button>
-          ))}
-        </div>
+        <EmojiPicker
+          onClose={() => setEmoji(false)}
+          onPick={(e) => {
+            const el = area.current;
+            const at = el?.selectionStart ?? text.length;
+            const next = text.slice(0, at) + e + text.slice(el?.selectionEnd ?? at);
+            onChange(next, at + e.length);
+            requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + e.length, at + e.length); });
+          }}
+          onSticker={(e) => { sendMessage(qc, convId, { body: e, replyTo: null, attachments: [] }); setEmoji(false); }}
+        />
       )}
       {mention && candidates.length > 0 && (
         <div className="mention-pop" role="listbox" aria-label="Mention someone">
@@ -288,7 +296,7 @@ export function Composer({ convId, detail, canSend }: { convId: string; detail: 
         </div>
       ) : (
       <div className="composer__row">
-        <IconButton label="Emoji" onClick={() => setEmoji((v) => !v)}><Smile size={24} /></IconButton>
+        <IconButton label="Emoji, stickers and GIFs" data-emoji-toggle onClick={() => setEmoji((v) => !v)}><Smile size={24} /></IconButton>
         <input ref={picker} type="file" hidden multiple accept={ACCEPT} onChange={(e) => upload(e.target.files)} />
         <textarea
           ref={area}
@@ -324,7 +332,10 @@ export function Composer({ convId, detail, canSend }: { convId: string; detail: 
         ) : (
           <>
             {canRecord && <IconButton label="Record voice message" onClick={startRecording}><Mic size={24} /></IconButton>}
-            <IconButton label="Attach file" onClick={() => picker.current?.click()}><Plus size={26} /></IconButton>
+            <Menu align="right" trigger={<span className="icon-btn" role="button" tabIndex={0} aria-label="Attach file"><Plus size={26} /></span>} items={[
+              { label: "Photos", icon: <ImageIcon size={17} />, onClick: () => openPicker("image/png,image/jpeg,image/webp,image/gif") },
+              { label: "File", icon: <FileIcon size={17} />, onClick: () => openPicker(ACCEPT) },
+            ]} />
           </>
         )}
       </div>

@@ -18,7 +18,7 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8000      # seeds demo data when the DB is empty
-pytest                                          # 98 tests
+pytest                                          # 101 tests
 
 # frontend (Node 20+)
 cd frontend
@@ -57,18 +57,21 @@ Key decisions (all explainable and tested):
 - **Frontend.** TanStack Query is the server-state cache; WebSocket events patch it. Zustand holds UI state (outbox, typing, presence, theme).
 
 ### Data model
-`users, sessions, contacts, conversations, conversation_members (role, joined_seq, left_seq, cursors, pin/mute/archive), messages, message_reactions, attachments, webhook_endpoints, webhook_deliveries, inbound_webhooks`.
+`users, sessions (one row per signed-in device), contacts, blocks, conversations, conversation_members (role, joined_seq, left_seq, cursors, pin/mute/archive, `request_pending` for message requests), messages (SYSTEM rows carry a `system_event` JSON, which is also how call outcomes are stored), message_hidden (delete for me), message_reactions, attachments, stories (24-hour TTL), story_views, webhook_endpoints, webhook_deliveries, inbound_webhooks`.
 
 ### API (prefix `/api`)
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /auth/request-otp`, `/auth/verify-otp`, `/auth/logout`, `/auth/ws-ticket` |
+| Auth | `POST /auth/request-otp`, `/auth/verify-otp`, `/auth/logout`, `/auth/ws-ticket`, `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `POST /auth/sessions/revoke-others` |
 | Users | `GET/PATCH /users/me`, `POST /users/me/avatar`, `GET /users/search`, `GET/POST /contacts`, `DELETE /contacts/{id}` |
 | Conversations | `GET /conversations`, `POST /conversations/direct`, `/groups`, `GET/PATCH /conversations/{id}`, `PATCH .../me`, `POST .../avatar`, `.../members`, `.../leave`, member role/remove |
 | Messages | `GET/POST /conversations/{id}/messages`, `POST .../read`, `.../delivered`, `PUT/DELETE /messages/{id}/reaction`, `PATCH /messages/{id}` (edit), `POST /messages/{id}/hide` (delete for me), `DELETE /messages/{id}`, `GET /conversations/{id}/search`, `GET /messages/{id}/receipts`, `POST /attachments`, `GET /attachments/{id}` |
+| Privacy | `GET /blocks`, `POST/DELETE /blocks/{user_id}` |
+| Stories | `GET/POST /stories`, `POST /stories/image`, `GET /stories/{id}/media`, `POST /stories/{id}/view`, `GET /stories/{id}/views`, `DELETE /stories/{id}` |
+| Calls | `GET /calls` (history, derived from the call entries logged in each chat) |
 | Webhooks (Settings → Webhooks) | `/webhooks` CRUD + `/test` + `/deliveries`, `/conversations/{id}/inbound-hooks`, `POST /hooks/in/{token}`, `POST /dev/webhook-echo` |
 
-WebSocket `/ws?ticket=…` events: `message.new|edited|deleted|expired`, `receipt.updated`, `reaction.updated`, `conversation.updated`, `member.added|removed`, `presence.updated`, `typing.start|stop`, `pong`. Envelope: `{event, event_id, conversation_id, payload}`.
+WebSocket `/ws?ticket=…` events: `message.new|edited|deleted|expired`, `receipt.updated`, `reaction.updated`, `conversation.updated`, `member.added|removed`, `presence.updated`, `typing.start|stop`, `pong`. Call signaling (WebRTC offer/answer/ICE is only relayed, never stored): client sends `call.invite|accept|decline|end|signal`; server pushes `call.incoming|accepted|ended|signal`. Envelope: `{event, event_id, conversation_id, payload}`.
 
 ## Deployment
 - **Frontend → Vercel.** Root directory `frontend`. Set `NEXT_PUBLIC_API_URL` to the backend URL (add `NEXT_PUBLIC_WS_URL` only if it differs).

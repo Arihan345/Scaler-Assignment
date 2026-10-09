@@ -1,5 +1,5 @@
 "use client";
-import { Archive, AtSign, BellOff, MailCheck, MailOpen, MoreHorizontal, Pin, PinOff, Bell } from "lucide-react";
+import { Archive, AtSign, BellOff, MailCheck, MailOpen, MoreHorizontal, Pin, PinOff, Bell, BadgeCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/api";
@@ -63,7 +63,7 @@ export function ConversationRow({ item, active, onOpen }: { item: ConversationLi
         <Avatar note={item.is_note_to_self} id={item.peer?.id ?? item.id} name={title} src={item.type === "GROUP" ? item.avatar_url : item.peer?.avatar_url} online={online} />
         <div className="conv-row__body">
           <div className="conv-row__top">
-            <span className="conv-row__title">{title}</span>
+            <span className="conv-row__title">{title}{item.is_note_to_self && <BadgeCheck size={16} className="verified" aria-label="Verified" />}</span>
             {item.last_message && <span className="conv-row__time">{listTime(item.last_message.created_at)}</span>}
           </div>
           <div className="conv-row__bottom">

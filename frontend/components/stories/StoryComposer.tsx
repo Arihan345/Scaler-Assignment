@@ -1,24 +1,34 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
-import { ImagePlus } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/query";
 import { useUi } from "@/store/ui";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
 
 const COLORS = ["#2c6bed", "#8e44ad", "#d35400", "#16a085", "#c0392b", "#2c3e50"];
 
-/** New story: text on a coloured background, or a photo with an optional caption. Visible for 24 hours. */
-export function StoryComposer({ onClose }: { onClose: () => void }) {
+/** Full-screen story editor like Signal's: a portrait card with centred text (or a photo and caption). Visible for 24 hours. */
+export function StoryComposer({ mode, onClose }: { mode: "text" | "photo"; onClose: () => void }) {
   const qc = useQueryClient();
   const [text, setText] = useState("");
-  const [bg, setBg] = useState(COLORS[0]);
+  const [ci, setCi] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const preview = file ? URL.createObjectURL(file) : null;
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => { if (mode === "photo") input.current?.click(); }, [mode]);
+  useEffect(() => {
+    if (!file) return setPreview(null);
+    const u = URL.createObjectURL(file);
+    setPreview(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); onClose(); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
 
   async function post() {
     setBusy(true);
@@ -29,7 +39,7 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
         if (text.trim()) form.append("caption", text.trim());
         await api.upload("/stories/image", form);
       } else {
-        await api.post("/stories", { body: text, bg });
+        await api.post("/stories", { body: text, bg: COLORS[ci] });
       }
       qc.invalidateQueries({ queryKey: keys.stories });
       useUi.getState().toast("Story posted for 24 hours", "success");
@@ -41,17 +51,17 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="New story" onClose={onClose} footer={<Button variant="primary" loading={busy} disabled={!file && !text.trim()} onClick={post}>Post story</Button>}>
-      <div className="story-compose" style={file ? undefined : { background: bg }}>
+    <div className="story-composer" role="dialog" aria-label="New story">
+      <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/gif,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); else if (!text) onClose(); }} />
+      <div className="story-composer__card" style={file ? undefined : { background: COLORS[ci] }}>
         {preview && <img src={preview} alt="Story preview" />}
-        <textarea autoFocus maxLength={280} value={text} onChange={(e) => setText(e.target.value)} placeholder={file ? "Add a caption" : "Type a story"} aria-label="Story text" />
+        <textarea autoFocus={!file} maxLength={280} value={text} onChange={(e) => setText(e.target.value)} placeholder={file ? "Add a caption" : "Add text"} aria-label="Story text" />
       </div>
-      <div className="story-compose__tools">
-        {!file && COLORS.map((c) => <button key={c} className={`swatch ${c === bg ? "is-on" : ""}`} style={{ background: c }} aria-label={`Background ${c}`} onClick={() => setBg(c)} />)}
-        <span style={{ flex: 1 }} />
-        <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/gif,image/webp" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        {file ? <Button variant="ghost" onClick={() => setFile(null)}>Remove photo</Button> : <Button variant="ghost" onClick={() => input.current?.click()}><ImagePlus size={16} /> Add photo</Button>}
+      <div className="story-composer__bar">
+        <button className="btn btn--secondary" onClick={onClose}>Discard</button>
+        {!file && <button className="story-composer__dot" style={{ background: COLORS[ci] }} aria-label="Change background colour" onClick={() => setCi((ci + 1) % COLORS.length)} />}
+        <button className="btn btn--primary" disabled={busy || (!file && !text.trim())} onClick={post}>{busy ? "Posting…" : "Post"}</button>
       </div>
-    </Modal>
+    </div>
   );
 }

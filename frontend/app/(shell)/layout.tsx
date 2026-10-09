@@ -24,7 +24,7 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
 
   if (!hydrated || !token || !user || !user.onboarded) return <div className="auth-screen" aria-busy="true" />;
 
-  const hasMain = pathname !== "/" && pathname !== "/settings" && pathname !== "/stories";
+  const hasMain = pathname !== "/" && pathname !== "/settings" && pathname !== "/stories" && pathname !== "/calls";
   return (
     <SocketProvider>
       <div className={`app ${hasMain ? "has-thread" : ""}`}>

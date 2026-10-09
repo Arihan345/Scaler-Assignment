@@ -5,6 +5,14 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export const parse = (iso: string) => new Date(iso);
 
+/** Signal's compact recent time: "now", "5m", then the clock time once it is an hour old or more. */
+export function shortAgo(iso: string, now = Date.now()): string {
+  const mins = Math.floor((now - parse(iso).getTime()) / 60_000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  return clock(iso);
+}
+
 export function clock(iso: string): string {
   const d = parse(iso);
   let h = d.getHours();
@@ -21,7 +29,7 @@ const DAY = 86_400_000;
 export function listTime(iso: string, now = new Date()): string {
   const d = parse(iso);
   const diff = Math.round((startOfDay(now) - startOfDay(d)) / DAY);
-  if (diff <= 0) return clock(iso);
+  if (diff <= 0) return shortAgo(iso, now.getTime());
   if (diff === 1) return "Yesterday";
   if (diff < 7) return WEEKDAYS[d.getDay()];
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
@@ -135,6 +143,8 @@ export function systemText(ev: SystemEvent, members: Member[], meId: string | un
       if (ev.outcome === "declined") return mine ? "Call declined" : `You declined a ${kind}`;
       return mine ? "No answer" : `Missed ${kind}`;
     }
+    case "request_accepted":
+      return ev.actor === meId ? "You accepted the message request" : "Message request accepted";
     default:
       return "";
   }
@@ -143,6 +153,7 @@ export function systemText(ev: SystemEvent, members: Member[], meId: string | un
 /** One-line preview for the conversation list. */
 export function previewText(item: ConversationListItem, meId: string | undefined, members?: Member[]): string {
   const m: LastMessage | null = item.last_message;
+  if (item.is_request) return "Message Request";
   if (!m) return item.type === "GROUP" ? "No messages yet" : "";
   if (m.type === "SYSTEM") return m.system_event ? systemText(m.system_event, members ?? [], meId) || "Group updated" : "";
   if (m.deleted_at) return m.sender_id === meId ? "You deleted this message" : "This message was deleted";

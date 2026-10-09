@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 export default function SettingsHome() {
   const router = useRouter();
   useEffect(() => {
-    if (window.matchMedia("(min-width: 761px)").matches) router.replace("/settings/general");
+    if (window.matchMedia("(min-width: 761px)").matches) router.replace("/settings/devices");
   }, [router]);
   return <EmptyState title="Settings">Choose a section.</EmptyState>;
 }

@@ -3,7 +3,7 @@ export function EmptyState({ icon, title, children }: { icon?: React.ReactNode; 
     <div className="empty">
       {icon && <div className="empty__icon">{icon}</div>}
       <h3>{title}</h3>
-      {children && <p className="muted">{children}</p>}
+      {children && <div className="muted">{children}</div>}
     </div>
   );
 }

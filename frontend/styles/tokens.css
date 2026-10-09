@@ -5,6 +5,9 @@
   --blue: #2c6bed;
   --blue-hover: #1f5bd6;
   --blue-soft: #e3ecfd;
+  --blue-solid: #2c6bed; /* filled controls (white text): same in both themes so contrast holds */
+  --blue-solid-hover: #1f5bd6;
+  color-scheme: light;
 
   --bg: #ffffff;
   --bg-pane: #ffffff;
@@ -13,6 +16,8 @@
   --bg-selected: #e9e9eb;
   --bg-input: #f1f1f2;
   --bg-timeline: #ffffff;
+  --bg-card: #ffffff;
+  --toggle-on: #4f4ff0;
 
   --text: #1b1b1b;
   --text-secondary: #707075;
@@ -39,6 +44,7 @@
   --blue: #5b8cf5;
   --blue-hover: #7aa0f7;
   --blue-soft: #243253;
+  color-scheme: dark;
 
   --bg: #1b1b1b;
   --bg-pane: #1b1b1b;
@@ -47,6 +53,8 @@
   --bg-selected: #2e2e2e;
   --bg-input: #2a2a2a;
   --bg-timeline: #1b1b1b;
+  --bg-card: #262626;
+  --toggle-on: #5b5bf5;
 
   --text: #f2f2f2;
   --text-secondary: #9b9ba1;

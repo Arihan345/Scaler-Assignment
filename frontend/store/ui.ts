@@ -44,6 +44,9 @@ type UiState = {
   toast: (text: string, kind?: Toast["kind"], action?: Toast["action"]) => void;
   dismissToast: (id: number) => void;
 
+  navCollapsed: boolean;
+  toggleNav: () => void;
+
   theme: ThemePref;
   initTheme: () => void;
   setTheme: (t: ThemePref) => void;
@@ -112,12 +115,19 @@ export const useUi = create<UiState>((set, get) => ({
 
   toasts: [],
   toast: (text, kind = "info", action) => {
+    if (get().toasts.some((t) => t.text === text)) return; // the same message twice in a row is just noise
     const id = toastId++;
     set((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, action }] }));
     setTimeout(() => get().dismissToast(id), kind === "error" ? 6000 : 4000);
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
+  navCollapsed: typeof window !== "undefined" && (() => { try { return localStorage.getItem("signal.navCollapsed") === "1"; } catch { return false; } })(),
+  toggleNav: () => set((st) => {
+    const v = !st.navCollapsed;
+    try { localStorage.setItem("signal.navCollapsed", v ? "1" : "0"); } catch { /* storage unavailable */ }
+    return { navCollapsed: v };
+  }),
   theme: "system",
   initTheme: () => {
     let t: ThemePref = "system";

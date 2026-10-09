@@ -71,8 +71,7 @@ async def invite(user_id: str, conversation_id: str, video: bool) -> None:
         return await _end_reason(user_id, call_id, "error:" + err)
     if user_id in USER_CALL or callee in USER_CALL:
         return await _end_reason(user_id, call_id, "busy")
-    if not manager.is_online(callee):
-        return await _end_reason(user_id, call_id, "unavailable")
+    # An offline callee is not an error: like Signal, the call just rings until it times out and is logged as missed.
     call = Call(call_id, conversation_id, user_id, callee, bool(video))
     CALLS[call_id] = call
     USER_CALL[user_id] = USER_CALL[callee] = call_id

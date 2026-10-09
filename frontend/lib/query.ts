@@ -14,6 +14,7 @@ export const keys = {
   preview: (url: string) => ["link-preview", url] as const,
   search: (q: string) => ["user-search", q] as const,
   stories: ["stories"] as const,
+  calls: ["calls"] as const,
   sessions: ["sessions"] as const,
   webhooks: ["webhooks"] as const,
   deliveries: (id: string) => ["webhook-deliveries", id] as const,

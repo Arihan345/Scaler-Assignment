@@ -48,22 +48,27 @@ export function PrivacySettings() {
 
   return (
     <>
-      {ROWS.map((r) => (
-        <div className="setting-row" key={r.key}>
-          <div>{r.label}<small>{r.sub}</small></div>
-          <Toggle label={r.label} checked={p[r.key]} onChange={(v) => set(r.key, v)} />
-        </div>
-      ))}
-      <h3 style={{ margin: "24px 0 8px" }}>Blocked people</h3>
-      {blocked.isLoading && <p className="muted">Loading…</p>}
-      {!blocked.isLoading && (blocked.data?.length ?? 0) === 0 && <p className="muted">You haven't blocked anyone. Blocked people can't message you, and you can't message them.</p>}
-      {(blocked.data ?? []).map((u) => (
-        <div className="member-row" key={u.id}>
-          <Avatar id={u.id} name={u.display_name} src={u.avatar_url} size={40} />
-          <div><b>{u.display_name}</b><div className="muted" style={{ fontSize: 12 }}>{u.username ? `@${u.username}` : u.phone_number}</div></div>
-          <Button onClick={() => unblock(u)}>Unblock</Button>
-        </div>
-      ))}
+      <h3 className="settings__h">Messaging</h3>
+      <div className="card">
+        {ROWS.map((r) => (
+          <div className="setting-row" key={r.key}>
+            <div>{r.label}<small>{r.sub}</small></div>
+            <Toggle label={r.label} checked={p[r.key]} onChange={(v) => set(r.key, v)} />
+          </div>
+        ))}
+      </div>
+      <h3 className="settings__h">Blocked</h3>
+      <div className="card">
+        {blocked.isLoading && <p className="muted" style={{ padding: "12px 0" }}>Loading…</p>}
+        {!blocked.isLoading && (blocked.data?.length ?? 0) === 0 && <div className="setting-row"><div>Blocked<small>No users or groups</small></div></div>}
+        {(blocked.data ?? []).map((u) => (
+          <div className="member-row" key={u.id}>
+            <Avatar id={u.id} name={u.display_name} src={u.avatar_url} size={40} />
+            <div><b>{u.display_name}</b><div className="muted" style={{ fontSize: 12 }}>{u.username ? `@${u.username}` : u.phone_number}</div></div>
+            <Button onClick={() => unblock(u)}>Unblock</Button>
+          </div>
+        ))}
+      </div>
     </>
   );
 }

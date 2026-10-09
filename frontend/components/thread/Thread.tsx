@@ -43,6 +43,11 @@ export function Thread({ id }: { id: string }) {
     }
   }, [detail?.marked_unread, id, qc]);
   useEffect(() => () => useUi.getState().clearSelection(), [id]);
+  useEffect(() => {
+    const open = () => setDetails(true); // the intro card's "name ›" asks for the details panel
+    window.addEventListener("signal:open-details", open);
+    return () => window.removeEventListener("signal:open-details", open);
+  }, []);
 
   useEffect(() => {
     useUi.getState().setOpenConversation(id);
@@ -70,7 +75,7 @@ export function Thread({ id }: { id: string }) {
       <PinnedBar detail={detail} meId={meId} onJump={(m) => setJump({ id: m.id, seq: m.seq, n: Date.now() })} />
       <MessageList convId={id} detail={detail} meId={meId} jump={jump} />
       {detail.is_request ? <RequestBar detail={detail} /> : selecting ? <SelectionBar convId={id} meId={meId} /> : <Composer convId={id} detail={detail} canSend={canSend} />}
-      {details && <DetailsPanel convId={id} onClose={() => setDetails(false)} />}
+      {details && <DetailsPanel convId={id} onClose={() => setDetails(false)} onSearch={() => { setDetails(false); setSearching(true); }} />}
       {media && <MediaPanel convId={id} onClose={() => setMedia(false)} onJump={(m) => setJump({ id: m.id, seq: m.seq, n: Date.now() })} />}
     </div>
   );

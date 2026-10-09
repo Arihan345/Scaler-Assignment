@@ -1,7 +1,7 @@
 """Conversations (DMs + groups share one model), membership, list/detail views."""
 import json
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -207,6 +207,19 @@ def _neg(iso: str) -> tuple:
     return tuple(-ord(ch) for ch in iso)
 
 
+def _groups_in_common(db: Session, me_id: str, peer_id: str) -> int:
+    """Number of active group chats that both I and the peer are currently in."""
+    mine = select(ConversationMember.conversation_id).where(
+        ConversationMember.user_id == me_id, ConversationMember.left_at.is_(None)
+    )
+    theirs = select(ConversationMember.conversation_id).where(
+        ConversationMember.user_id == peer_id, ConversationMember.left_at.is_(None), ConversationMember.conversation_id.in_(mine)
+    )
+    return db.execute(
+        select(func.count()).select_from(Conversation).where(Conversation.type == "GROUP", Conversation.id.in_(theirs))
+    ).scalar_one()
+
+
 def get_detail(db: Session, me_id: str, conversation_id: str, online_ids=frozenset()) -> dict:
     me = require_member_for_read(db, me_id, conversation_id)
     conv = get_conversation(db, conversation_id)
@@ -225,6 +238,7 @@ def get_detail(db: Session, me_id: str, conversation_id: str, online_ids=frozens
     )
     users = _load_users(db, [m.user_id for m in members])
     item["description"] = conv.description
+    item["groups_in_common"] = _groups_in_common(db, me_id, item["peer"]["id"]) if item.get("peer") else 0
     item["created_at"] = conv.created_at
     item["last_seq"] = conv.last_seq
     item["members"] = [
@@ -337,8 +351,13 @@ def resolve_request(db: Session, me: User, conversation_id: str, action: str) ->
     member.request_pending = 0
     if action == "delete":
         member.is_archived = 1
+        db.commit()
+        return [Event([me.id], "conversation.updated", conversation_id, {})]
+    # Accepting leaves a "You accepted X's message request" line in the thread (shown with Block or Report…).
+    audience = active_member_ids(db, conversation_id)
+    note = _system_message(db, conversation_id, {"kind": "request_accepted", "actor": me.id}, now_iso())
     db.commit()
-    return [Event([me.id], "conversation.updated", conversation_id, {})]
+    return [_msg_event(db, note, audience), _conv_updated(db, conversation_id, audience)]
 
 
 def update_my_settings(db: Session, me: User, conversation_id: str, fields: dict) -> list[Event]:

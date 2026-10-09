@@ -3,8 +3,8 @@ import { create } from "zustand";
 
 // Local, per-browser preferences (not synced). Privacy settings that affect other people live on the server instead.
 const KEY = "signal.prefs";
-export type Prefs = { linkPreviews: boolean; sendWithEnter: boolean; notifyToasts: boolean; notifyContent: boolean; sounds: boolean; desktopNotify: boolean };
-const DEFAULTS: Prefs = { linkPreviews: true, sendWithEnter: true, notifyToasts: true, notifyContent: true, sounds: false, desktopNotify: false };
+export type Prefs = { linkPreviews: boolean; sendWithEnter: boolean; notifyToasts: boolean; notifyContent: boolean; sounds: boolean; desktopNotify: boolean; incomingCalls: boolean };
+const DEFAULTS: Prefs = { linkPreviews: true, sendWithEnter: true, notifyToasts: true, notifyContent: true, sounds: false, desktopNotify: false, incomingCalls: true };
 
 function load(): Prefs {
   try {
@@ -22,7 +22,7 @@ export const usePrefs = create<State>((set, get) => ({
   hydrate: () => set({ ...load(), hydrated: true }),
   set: (p) => {
     set(p);
-    const { linkPreviews, sendWithEnter, notifyToasts, notifyContent, sounds, desktopNotify } = get();
-    try { localStorage.setItem(KEY, JSON.stringify({ linkPreviews, sendWithEnter, notifyToasts, notifyContent, sounds, desktopNotify })); } catch { /* storage unavailable */ }
+    const { linkPreviews, sendWithEnter, notifyToasts, notifyContent, sounds, desktopNotify, incomingCalls } = get();
+    try { localStorage.setItem(KEY, JSON.stringify({ linkPreviews, sendWithEnter, notifyToasts, notifyContent, sounds, desktopNotify, incomingCalls })); } catch { /* storage unavailable */ }
   },
 }));

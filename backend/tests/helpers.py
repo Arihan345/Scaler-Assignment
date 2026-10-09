@@ -28,7 +28,13 @@ def direct(client, a: dict, b: dict) -> str:
     assert r.status_code == 200, r.text
     cid = r.json()["id"]
     # most tests exercise normal chats, so the recipient accepts the (non-contact) message request up front
-    client.post(f"/api/conversations/{cid}/request/accept", headers=b["h"])
+    from sqlalchemy import text
+
+    from app.db import engine as _e
+
+    with _e.new_session() as db:  # clear the flag directly so accepting doesn't add a "request accepted" line to every test thread
+        db.execute(text("UPDATE conversation_members SET request_pending=0 WHERE conversation_id=:c"), {"c": cid})
+        db.commit()
     return cid
 
 

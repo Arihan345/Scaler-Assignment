@@ -101,8 +101,6 @@ export function StoryViewer({ user, stories, mine, onClose }: { user: User; stor
           {stories.map((s, n) => <i key={s.id}><b style={{ width: n < i ? "100%" : n === i ? `${progress * 100}%` : "0%" }} /></i>)}
         </div>
         <div className="story-head">
-          <Avatar id={user.id} name={user.display_name} src={user.avatar_url} size={36} />
-          <div><b>{mine ? "My story" : user.display_name}</b><small>{dayLabel(story.created_at)} · {clock(story.created_at)}</small></div>
           <span style={{ flex: 1 }} />
           {mine && <button className="icon-btn" aria-label="Delete story" onClick={remove}><Trash2 size={18} /></button>}
           <button className="icon-btn" aria-label="Close story" onClick={onClose}><X size={20} /></button>
@@ -110,6 +108,10 @@ export function StoryViewer({ user, stories, mine, onClose }: { user: User; stor
         <div className="story-body" style={story.kind === "TEXT" ? { background: story.bg ?? "#2c6bed" } : undefined}>
           {story.kind === "IMAGE" && (img ? <img src={img} alt="Story" /> : <span className="muted">Loading…</span>)}
           {story.body && <p className={story.kind === "TEXT" ? "story-text" : "story-caption"}>{story.body}</p>}
+        </div>
+        <div className="story-who">
+          <Avatar id={user.id} name={user.display_name} src={user.avatar_url} size={36} />
+          <div><b>{mine ? "My Story" : user.display_name}</b><small>{dayLabel(story.created_at)} · {clock(story.created_at)}</small></div>
         </div>
         <button className="story-nav story-nav--prev" aria-label="Previous story" onClick={(e) => { e.stopPropagation(); prev(); }}><ChevronLeft size={26} /></button>
         <button className="story-nav story-nav--next" aria-label="Next story" onClick={(e) => { e.stopPropagation(); next(); }}><ChevronRight size={26} /></button>

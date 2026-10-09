@@ -1,12 +1,12 @@
 "use client";
 import { startCall } from "@/lib/calls";
 import { useQueryClient } from "@tanstack/react-query";
-import { Archive, BellOff, Ban, ChevronLeft, Images, MoreHorizontal, Pin, PinOff, Search, Settings2, Timer, UserCheck, Phone, Video } from "lucide-react";
+import { Archive, Bell, BellOff, Ban, MailOpen, ChevronLeft, Images, MoreHorizontal, Pin, PinOff, Search, Settings2, Timer, UserCheck, Phone, Video, BadgeCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { api, errorMessage } from "@/lib/api";
-import { convTitle, conversationOnline, isMuted, lastSeen } from "@/lib/format";
+import { convTitle, conversationOnline, formatTimer, isMuted, lastSeen } from "@/lib/format";
 import { keys } from "@/lib/query";
 import type { ConversationDetail } from "@/lib/types";
 import { useAuth } from "@/store/auth";
@@ -14,6 +14,16 @@ import { useUi } from "@/store/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { IconButton } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
+
+const TIMER_CHOICES = [0, 2419200, 604800, 86400, 28800, 3600, 300, 30];
+const hours = (h: number) => () => new Date(Date.now() + h * 3600_000).toISOString();
+const MUTE_CHOICES = [
+  { label: "1 hour", until: hours(1) },
+  { label: "8 hours", until: hours(8) },
+  { label: "1 day", until: hours(24) },
+  { label: "1 week", until: hours(168) },
+  { label: "Always", until: () => "2999-01-01T00:00:00.000Z" },
+];
 
 export function ThreadHeader({ detail, onDetails, onSearch, onMedia }: { detail: ConversationDetail; onDetails: () => void; onSearch: () => void; onMedia: () => void }) {
   const qc = useQueryClient();
@@ -61,6 +71,16 @@ export function ThreadHeader({ detail, onDetails, onSearch, onMedia }: { detail:
     }
   }
 
+  const canSetTimer = detail.type !== "GROUP" || detail.my_role === "ADMIN";
+  async function setTimer(seconds: number) {
+    try {
+      await api.patch(`/conversations/${detail.id}`, { disappearing_seconds: seconds });
+      qc.invalidateQueries({ queryKey: keys.conversation(detail.id) });
+    } catch (e) {
+      useUi.getState().toast(errorMessage(e), "error");
+    }
+  }
+
   const canCall = detail.type === "DIRECT" && !note && !!detail.peer && !detail.blocked && !detail.is_request;
   return (
     <header className="thread-header">
@@ -68,21 +88,34 @@ export function ThreadHeader({ detail, onDetails, onSearch, onMedia }: { detail:
       <button className="thread-header__who" onClick={note ? undefined : onDetails} aria-label="Conversation details" style={note ? { cursor: "default" } : undefined}>
         <Avatar note={note} id={detail.peer?.id ?? detail.id} name={title} src={detail.type === "GROUP" ? detail.avatar_url : detail.peer?.avatar_url} size={44} online={conversationOnline(detail, presence)} />
         <span style={{ minWidth: 0 }}>
-          <div className="thread-header__title">{title}</div>
+          <div className="thread-header__title"><span className="ellipsis">{title}</span>{note && <BadgeCheck size={18} className="verified" aria-label="Verified: only you can read this chat" />}</div>
           <div className="thread-header__sub">{sub}</div>
         </span>
       </button>
-      {canCall && <IconButton label="Start voice call" onClick={() => void startCall(detail.id, detail.peer!, false)}><Phone size={22} /></IconButton>}
       {canCall && <IconButton label="Start video call" onClick={() => void startCall(detail.id, detail.peer!, true)}><Video size={22} /></IconButton>}
-      <IconButton label="Search in chat" onClick={onSearch}><Search size={22} /></IconButton>
+      {canCall && <IconButton label="Start voice call" onClick={() => void startCall(detail.id, detail.peer!, false)}><Phone size={22} /></IconButton>}
+      <IconButton label="Search in chat" className="hide-xs" onClick={onSearch}><Search size={22} /></IconButton>
       <Menu trigger={<span className="icon-btn" role="button" tabIndex={0} aria-label="Chat options"><MoreHorizontal size={22} /></span>} items={[
-        { label: "All media", icon: <Images size={17} />, onClick: onMedia },
-        { label: "Disappearing messages", icon: <Timer size={17} />, hidden: note, onClick: onDetails },
-        { label: muted ? "Unmute notifications" : "Mute notifications", icon: <BellOff size={17} />, onClick: () => patchMe({ muted_until: muted ? null : "2999-01-01T00:00:00.000Z" }) },
+        { label: "Search in chat", icon: <Search size={17} />, onClick: onSearch },
+        {
+          label: "Disappearing messages", icon: <Timer size={17} />, hidden: note || !canSetTimer, onClick: () => {},
+          children: TIMER_CHOICES.map((t) => ({ label: t === 0 ? "Off" : formatTimer(t), checked: detail.disappearing_seconds === t, onClick: () => setTimer(t) })),
+        },
+        muted
+          ? { label: "Unmute notifications", icon: <Bell size={17} />, onClick: () => patchMe({ muted_until: null }) }
+          : {
+              label: "Mute notifications", icon: <BellOff size={17} />, onClick: () => {},
+              children: [
+                { label: "Mute this chat for…", caption: true, onClick: () => {} },
+                ...MUTE_CHOICES.map((m) => ({ label: m.label, onClick: () => patchMe({ muted_until: m.until() }) })),
+              ],
+            },
         { label: detail.type === "GROUP" ? "Group settings" : "Chat settings", icon: <Settings2 size={17} />, hidden: note, onClick: onDetails },
-        { label: detail.is_pinned ? "Unpin chat" : "Pin chat", icon: detail.is_pinned ? <PinOff size={17} /> : <Pin size={17} />, separatorBefore: true, onClick: () => patchMe({ is_pinned: !detail.is_pinned }) },
+        { label: "All media", icon: <Images size={17} />, onClick: onMedia },
+        { label: "Mark as unread", icon: <MailOpen size={17} />, separatorBefore: true, onClick: () => patchMe({ marked_unread: true }, () => router.push("/")) },
+        { label: detail.is_pinned ? "Unpin chat" : "Pin chat", icon: detail.is_pinned ? <PinOff size={17} /> : <Pin size={17} />, onClick: () => patchMe({ is_pinned: !detail.is_pinned }) },
         { label: detail.is_archived ? "Unarchive" : "Archive", icon: <Archive size={17} />, onClick: () => patchMe({ is_archived: !detail.is_archived }, () => !detail.is_archived && router.push("/")) },
-        { label: detail.blocked ? "Unblock" : "Block", icon: detail.blocked ? <UserCheck size={17} /> : <Ban size={17} />, danger: !detail.blocked, hidden: detail.type !== "DIRECT" || note || !detail.peer, separatorBefore: true, onClick: toggleBlock },
+        { label: detail.blocked ? "Unblock" : "Block", icon: detail.blocked ? <UserCheck size={17} /> : <Ban size={17} />, hidden: detail.type !== "DIRECT" || note || !detail.peer, onClick: toggleBlock },
       ]} />
     </header>
   );

@@ -1,9 +1,10 @@
 "use client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, Lock } from "lucide-react";
+import { ArrowDown, ChevronDown, ChevronRight, Lock, UserRoundX, Users } from "lucide-react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { retrySend } from "@/lib/actions";
+import { startCall } from "@/lib/calls";
 import { convTitle, dayKey, dayLabel, systemText } from "@/lib/format";
 import { keys, markDeleted, mergeOlder, patchMessage, removeMessages } from "@/lib/query";
 import { useAuth } from "@/store/auth";
@@ -12,7 +13,8 @@ import { computeStatus } from "@/lib/status";
 import type { ConversationDetail, DisplayStatus, Message, MessagesPage, OutboxItem } from "@/lib/types";
 import { useUi } from "@/store/ui";
 import { Avatar } from "@/components/ui/Avatar";
-import { ConfirmDialog } from "@/components/ui/Modal";
+import { ConfirmDialog, Modal } from "@/components/ui/Modal";
+import { useContacts } from "@/lib/hooks";
 import { ErrorState } from "@/components/ui/EmptyState";
 import { ThreadSkeleton } from "@/components/ui/Skeleton";
 import { MessageInfo } from "@/components/dialogs/MessageInfo";
@@ -34,6 +36,14 @@ function pendingToMessage(o: OutboxItem, i: number, meId: string): Message {
 
 export type JumpTarget = { id: number; seq: number; n: number };
 
+function groupWho(d: ConversationDetail, meId: string) {
+  const others = d.members.filter((m) => m.is_active && !m.user.is_bot && m.user.id !== meId).map((m) => m.user.display_name);
+  if (others.length === 0) return "No other group members yet";
+  const shown = others.slice(0, 3);
+  const more = others.length - shown.length;
+  return more > 0 ? `${shown.join(", ")} and ${more} more` : `${shown.join(", ")} and you`;
+}
+
 export function MessageList({ convId, detail, meId, jump }: { convId: string; detail: ConversationDetail; meId: string; jump: JumpTarget | null }) {
   const qc = useQueryClient();
   const box = useRef<HTMLDivElement>(null);
@@ -49,6 +59,9 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
   const prevLast = useRef<{ key: string; count: number } | null>(null);
   const lastAcked = useRef(0);
   const dividerSeq = useRef<number | null | undefined>(undefined);
+  const [tips, setTips] = useState(false);
+  const [openUpdates, setOpenUpdates] = useState<Set<string>>(new Set());
+  const contacts = useContacts();
   const outbox = useUi((s) => s.outbox[convId]);
   const sharesReceipts = useAuth((s) => s.user?.privacy?.read_receipts);
   const typing = useUi((s) => s.typing[convId]);
@@ -243,6 +256,19 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
 
   const others = Object.keys(typing ?? {}).filter((u) => u !== meId);
   const isGroup = detail.type === "GROUP";
+  const isContact = !detail.peer || (contacts.data ?? []).some((u) => u.id === detail.peer!.id);
+  // Divider label: how many messages from others sit at or after the first unread one.
+  const isGroupNotice = (m: Message) => m.type === "SYSTEM" && !!m.system_event && m.system_event.kind !== "call";
+  const runStart: (number | undefined)[] = [];
+  const runLen: Record<number, number> = {};
+  rows.forEach((r, i) => {
+    if (!isGroupNotice(r.msg)) return;
+    const st = i > 0 && runStart[i - 1] !== undefined ? runStart[i - 1]! : i;
+    runStart[i] = st;
+    runLen[st] = (runLen[st] ?? 0) + 1;
+  });
+  const lastCallId = [...rows].reverse().find((r) => r.msg.system_event?.kind === "call")?.msg.id;
+  const unreadAfter = (seq: number) => rows.filter((r) => r.msg.seq >= seq && r.msg.sender_id !== meId && r.msg.type !== "SYSTEM").length;
 
   return (
     <div className="timeline-wrap">
@@ -256,16 +282,36 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
             <>
               <div className="intro-card">
                 <Avatar note={detail.is_note_to_self} id={detail.peer?.id ?? detail.id} name={convTitle(detail)} src={isGroup ? detail.avatar_url : detail.peer?.avatar_url} size={96} />
-                <h2>{convTitle(detail)}</h2>
+                {isGroup || detail.is_note_to_self ? <h2>{convTitle(detail)}</h2> : (
+                  <button className="intro-card__name" onClick={() => window.dispatchEvent(new Event("signal:open-details"))}>{convTitle(detail)} <ChevronRight size={20} /></button>
+                )}
+                {!isGroup && !detail.is_note_to_self && detail.peer && !isContact && <span className="pill pill--warn"><UserRoundX size={14} /> Name not verified</span>}
                 <div className="muted">
-                  {isGroup ? `${detail.members.filter((m) => m.is_active && !m.user.is_bot).length} members` : detail.peer?.about || (detail.peer?.username ? `@${detail.peer.username}` : detail.peer?.phone_number)}
+                  {isGroup ? (<span className="intro-card__line"><Users size={15} /> {groupWho(detail, meId)}</span>) : detail.peer?.about || (detail.peer?.username ? `@${detail.peer.username}` : detail.peer?.phone_number)}
                 </div>
+                {!isGroup && !detail.is_note_to_self && detail.peer && (
+                  <div className="intro-card__line"><Users size={15} /> {detail.groups_in_common ? `${detail.groups_in_common} ${detail.groups_in_common === 1 ? "group" : "groups"} in common` : "No groups in common"}</div>
+                )}
+                {detail.is_request && <button className="btn btn--secondary" onClick={() => setTips(true)}>Safety tips</button>}
               </div>
               <div className="enc-notice"><Lock size={14} /> Encryption is simulated in this demo. Messages are not actually end-to-end encrypted.</div>
             </>
           )}
           {rows.map((r, i) => {
             const m = r.msg;
+            // Runs of 2+ group-change notices fold into one "N group updates" pill, like Signal.
+            const start = runStart[i];
+            if (start !== undefined) {
+              const first = rows[start].key;
+              if (i === start && runLen[start] > 1 && !openUpdates.has(first)) {
+                return (
+                  <button key={r.key} className="updates-pill" onClick={() => setOpenUpdates((s) => new Set(s).add(first))}>
+                    <Users size={14} /> {runLen[start]} group updates <ChevronDown size={14} />
+                  </button>
+                );
+              }
+              if (i !== start && runLen[start] > 1 && !openUpdates.has(first)) return null;
+            }
             const prev = rows[i - 1]?.msg;
             const next = rows[i + 1]?.msg;
             const newDay = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
@@ -281,13 +327,21 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
             return (
               <Fragment key={r.key}>
                 {newDay && <div className="date-sep">{dayLabel(m.created_at)}</div>}
-                {dividerSeq.current === m.seq && <div className="new-divider">New messages</div>}
+                {dividerSeq.current === m.seq && <div className="new-divider">{unreadAfter(m.seq)} Unread Message{unreadAfter(m.seq) === 1 ? "" : "s"}</div>}
                 {isSys ? (
-                  <div id={`m-${m.id}`} className="sys-msg">{m.system_event ? systemText(m.system_event, members, meId) : ""}</div>
+                  <div id={`m-${m.id}`} className="sys-msg">
+                    {m.system_event ? systemText(m.system_event, members, meId) : ""}
+                    {m.system_event?.kind === "request_accepted" && m.system_event.actor === meId && detail.peer && (
+                      <button className="pill-btn pill-btn--primary sys-msg__btn" onClick={() => window.dispatchEvent(new Event("signal:open-details"))}>Block or Report…</button>
+                    )}
+                    {m.system_event?.kind === "call" && m.id === lastCallId && !isGroup && detail.peer && !detail.blocked && (
+                      <button className="pill-btn pill-btn--primary sys-msg__btn" onClick={() => void startCall(detail.id, detail.peer!, !!m.system_event?.video)}>Call back</button>
+                    )}
+                  </div>
                 ) : (
                   <MessageBubble
                     msg={m} mine={mine} meId={meId} status={status} pending={r.pending}
-                    senderName={sender?.display_name} showSender={isGroup && !sameAsPrev} showAvatar={isGroup && !sameAsNext}
+                    senderName={sender?.display_name} showSender={isGroup && !sameAsPrev} showAvatar={isGroup && !sameAsNext} last={!sameAsNext} inGroup={isGroup}
                     avatar={sender && <Avatar id={sender.id} name={sender.display_name} src={sender.avatar_url} size={28} />}
                     gap={!sameAsPrev && !newDay && !!prev}
                     onReply={(x) => useUi.getState().setReplyTo(convId, x)}
@@ -321,6 +375,15 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
       {forward && <ForwardModal messages={[forward]} onClose={() => setForward(null)} />}
       {info && <MessageInfo message={info} onClose={() => setInfo(null)} />}
       {lightbox && <div className="lightbox" onClick={() => setLightbox(null)} role="dialog" aria-label="Image preview"><img src={lightbox} alt="" /></div>}
+      {tips && (
+        <Modal title="Safety tips" onClose={() => setTips(false)}>
+          <ul className="tips">
+            <li>Be careful with links and attachments from people you don't know.</li>
+            <li>Signal will never message you for a registration code, PIN or recovery key.</li>
+            <li>You can block or report a sender at any time.</li>
+          </ul>
+        </Modal>
+      )}
     </div>
   );
 }

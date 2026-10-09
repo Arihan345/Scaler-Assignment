@@ -1,7 +1,9 @@
 "use client";
-import { CheckSquare, Copy, FileText, Forward, Info, MoreHorizontal, Pencil, Pin, PinOff, Reply, SmilePlus, Timer, Trash2 } from "lucide-react";
+import { jumboEmojiCount } from "@/lib/emojiData";
+import { EmojiPicker } from "./EmojiPicker";
+import { Plus, CheckSquare, Copy, FileText, Forward, Info, MoreHorizontal, Pencil, Pin, PinOff, Reply, HeartPlus, Timer, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
-import { clock, formatBytes, isVoice } from "@/lib/format";
+import { shortAgo, formatBytes, isVoice } from "@/lib/format";
 import { usePrefs } from "@/store/prefs";
 import { colorFor } from "@/lib/colors";
 import { downloadAttachment, useAuthedMedia } from "@/lib/media";
@@ -20,6 +22,8 @@ export type BubbleProps = {
   senderName?: string;
   showSender: boolean;
   showAvatar: boolean;
+  last?: boolean;
+  inGroup?: boolean;
   avatar?: React.ReactNode;
   gap: boolean;
   status: DisplayStatus;
@@ -53,33 +57,41 @@ function ImageAttachment({ att, onOpen }: { att: Attachment; onOpen: (url: strin
 export function MessageBubble(p: BubbleProps) {
   const { msg, mine, pending } = p;
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [askDelete, setAskDelete] = useState(false);
   const [react, setReact] = useState(false);
+  const [fullReact, setFullReact] = useState(false);
   const deleted = !!msg.deleted_at;
   const images = msg.attachments.filter((a) => a.mime_type?.startsWith("image/"));
   const voices = msg.attachments.filter(isVoice);
   const others = msg.attachments.filter((a) => !a.mime_type?.startsWith("image/") && !isVoice(a));
   const linkPreviews = usePrefs((s) => s.linkPreviews);
   const url = !deleted && linkPreviews ? firstUrl(msg.body) : null;
+  const jumbo = !deleted && !msg.reply_to && msg.attachments.length === 0 ? jumboEmojiCount(msg.body) : 0;
   const mediaOnly = !deleted && !msg.body && images.length > 0 && others.length === 0 && !msg.reply_to;
 
   const canEdit = mine && !pending && !deleted && !!msg.body && Date.now() - new Date(msg.created_at).getTime() < 3 * 3600_000;
   const items: MenuItem[] = [
     { label: "Forward", icon: <Forward size={16} />, hidden: !msg.body && msg.attachments.length === 0, onClick: () => p.onForward(msg) },
-    { label: "Copy text", icon: <Copy size={16} />, hidden: !msg.body, onClick: () => navigator.clipboard?.writeText(msg.body ?? "") },
     { label: "Edit", icon: <Pencil size={16} />, hidden: !canEdit, onClick: () => p.onEdit(msg) },
-    { label: "Message info", icon: <Info size={16} />, hidden: !mine, onClick: () => p.onInfo(msg) },
-    { label: msg.pinned_at ? "Unpin message" : "Pin message", icon: msg.pinned_at ? <PinOff size={16} /> : <Pin size={16} />, onClick: () => p.onPin(msg) },
     { label: "Select", icon: <CheckSquare size={16} />, onClick: () => p.onSelect(msg) },
-    { label: "Delete for me", icon: <Trash2 size={16} />, separatorBefore: true, onClick: () => p.onDelete(msg, "me") },
-    { label: "Delete for everyone", icon: <Trash2 size={16} />, danger: true, hidden: !mine, onClick: () => p.onDelete(msg, "all") },
+    { label: "Copy text", icon: <Copy size={16} />, hidden: !msg.body, onClick: () => navigator.clipboard?.writeText(msg.body ?? "") },
+    { label: msg.pinned_at ? "Unpin" : "Pin", icon: msg.pinned_at ? <PinOff size={16} /> : <Pin size={16} />, onClick: () => p.onPin(msg) },
+    { label: "Info", icon: <Info size={16} />, hidden: !mine, onClick: () => p.onInfo(msg) },
+    { label: "Delete", icon: <Trash2 size={16} />, onClick: () => setAskDelete(true) },
   ];
   const canAct = !pending && !deleted;
+  // Like Signal, only the last message of a run shows its time and ticks (unless it is still sending or failed).
+  const showMeta = p.last !== false || p.status === "failed" || p.status === "sending" || !!msg.edited_at;
 
+  // Signal mirrors the order: [more, reply, react] left of my bubbles, [react, reply, more] right of theirs.
+  const btn: Record<string, React.ReactNode> = {
+    more: <button key="more" className="icon-btn" aria-label="More" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom }); }}><MoreHorizontal size={18} /></button>,
+    reply: <button key="reply" className="icon-btn" aria-label="Reply" onClick={() => p.onReply(msg)}><Reply size={18} /></button>,
+    react: <button key="react" className="icon-btn" aria-label="React" onClick={() => setReact((v) => !v)}><HeartPlus size={18} /></button>,
+  };
   const actions = canAct && !p.selecting && (
     <div className="msg-actions">
-      <button className="icon-btn" aria-label="More" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom }); }}><MoreHorizontal size={18} /></button>
-      <button className="icon-btn" aria-label="Reply" onClick={() => p.onReply(msg)}><Reply size={18} /></button>
-      <button className="icon-btn" aria-label="React" onClick={() => setReact((v) => !v)}><SmilePlus size={18} /></button>
+      {(mine ? ["more", "reply", "react"] : ["react", "reply", "more"]).map((k) => btn[k])}
     </div>
   );
 
@@ -88,12 +100,13 @@ export function MessageBubble(p: BubbleProps) {
       onClick={p.selecting ? () => p.onSelect(msg) : undefined}
       onContextMenu={(e) => { if (canAct && !p.selecting) { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); } }}>
       {p.selecting && <span className={`select-box ${p.selected ? "is-on" : ""}`} aria-hidden="true">{p.selected ? "✓" : ""}</span>}
-      {!mine && <div className="msg-row__avatar">{p.showAvatar && p.avatar}</div>}
+      {!mine && p.inGroup && <div className="msg-row__avatar">{p.showAvatar && p.avatar}</div>}
       {actions}
-      <div className={`bubble bubble--${mine ? "out" : "in"} ${mediaOnly ? "bubble--media" : ""}`} style={{ position: "relative" }}>
+      <div className={`bubble bubble--${mine ? "out" : "in"} ${mediaOnly ? "bubble--media" : ""} ${jumbo ? `bubble--jumbo bubble--jumbo-${jumbo}` : ""} ${deleted ? "bubble--deleted" : ""} ${!deleted && msg.reactions.length ? "bubble--reacted" : ""}`} style={{ position: "relative" }}>
         {react && (
           <div className={`react-picker react-picker--${mine ? "out" : "in"}`}>
             {QUICK.map((e) => <button key={e} onClick={() => { setReact(false); p.onReact(msg, e); }}>{e}</button>)}
+            <button aria-label="More emoji" onClick={() => { setReact(false); setFullReact(true); }}><Plus size={20} /></button>
           </div>
         )}
         {p.showSender && !mine && p.senderName && <div className="bubble__sender" style={{ color: colorFor(msg.sender_id ?? "") }}>{p.senderName}</div>}
@@ -104,7 +117,7 @@ export function MessageBubble(p: BubbleProps) {
           </button>
         )}
         {deleted ? (
-          <span className="bubble__deleted">{mine ? "You deleted this message" : "This message was deleted"}</span>
+          <span className="bubble__deleted"><XCircle size={16} />{mine ? "You deleted this message" : "This message was deleted"}</span>
         ) : (
           <>
             {images.map((a) => <ImageAttachment key={a.id} att={a} onOpen={p.onImage} />)}
@@ -125,8 +138,8 @@ export function MessageBubble(p: BubbleProps) {
           {msg.pinned_at && !deleted && <Pin size={11} aria-label="Pinned" />}
           {msg.expires_at && !deleted && <Timer size={12} aria-label="Disappearing message" />}
           {msg.edited_at && !deleted && <span>Edited</span>}
-          <span>{clock(msg.created_at)}</span>
-          {mine && !deleted && <StatusIcon status={p.status} size={16} />}
+          {showMeta && <span>{shortAgo(msg.created_at)}</span>}
+          {mine && !deleted && showMeta && <StatusIcon status={p.status} size={16} />}
         </div>
         {!deleted && msg.reactions.length > 0 && (
           <div className="reactions">
@@ -143,7 +156,21 @@ export function MessageBubble(p: BubbleProps) {
           </div>
         )}
       </div>
+      {fullReact && <EmojiPicker onClose={() => setFullReact(false)} onPick={(e) => { setFullReact(false); p.onReact(msg, e); }} onSticker={() => {}} />}
       {menu && <MenuPopup x={menu.x} y={menu.y} alignRight={mine} items={items} onClose={() => setMenu(null)} />}
+      {askDelete && (
+        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setAskDelete(false)}>
+          <div className="dialog-card" role="alertdialog" aria-label="Delete selected message?">
+            <h2>Delete selected message?</h2>
+            <p>{mine ? "You can delete this message just for you, or for everyone in the chat." : "This message will be deleted from this device only. Other people in the chat will still see it."}</p>
+            <div className="dialog-card__actions">
+              <button className="btn btn--secondary" autoFocus onClick={() => setAskDelete(false)}>Cancel</button>
+              <button className="btn btn--secondary is-danger" onClick={() => { setAskDelete(false); p.onDelete(msg, "me"); }}>Delete for me</button>
+              {mine && <button className="btn btn--secondary is-danger" onClick={() => { setAskDelete(false); p.onDelete(msg, "all"); }}>Delete for everyone</button>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

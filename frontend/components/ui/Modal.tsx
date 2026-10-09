@@ -70,29 +70,21 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); onClose(); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
   return (
-    <Modal
-      title={title}
-      onClose={onClose}
-      width={400}
-      footer={
-        <>
-          <button className="btn btn--secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className={`btn ${danger ? "btn--danger" : "btn--primary"}`}
-            onClick={() => {
-              onConfirm();
-              onClose();
-            }}
-          >
-            {confirmLabel}
-          </button>
-        </>
-      }
-    >
-      <p className="muted">{message}</p>
-    </Modal>
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog-card" role="alertdialog" aria-label={title}>
+        <h2>{title}</h2>
+        <p>{message}</p>
+        <div className="dialog-card__actions">
+          <button className="btn btn--secondary" autoFocus onClick={onClose}>Cancel</button>
+          <button className={`btn btn--secondary ${danger ? "is-danger" : "is-primary"}`} onClick={() => { onConfirm(); onClose(); }}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
   );
 }

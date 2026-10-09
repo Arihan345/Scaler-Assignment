@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, Check, UserPlus, Users } from "lucide-react";
+import { ArrowLeft, AtSign, BadgeCheck, Check, ChevronLeft, Hash, Search, UserPlus, Users } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -95,51 +95,57 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
   }
 
   const isGroup = mode === "group";
+  const showNote = !isGroup && (!term || "note to self".includes(term));
+  const seed = (v: string) => { setQ(v); document.getElementById("nc-search")?.focus(); };
   return (
-    <Modal
-      title={isGroup ? "Add members" : "New chat"}
-      onClose={onClose}
-      footer={isGroup ? <Button variant="primary" disabled={picked.length === 0} onClick={() => { setError(""); setMode("name"); }}>Next</Button> : undefined}
-    >
-      <div className="field" style={{ marginBottom: 8 }}>
-        <input autoFocus placeholder="Search name, username or phone number" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search people" />
+    <>
+      <div className="nc-head">
+        <button className="icon-btn" aria-label="Back" onClick={() => (isGroup ? setMode("direct") : onClose())}><ChevronLeft size={22} /></button>
+        <h1>{isGroup ? "Add members" : "New chat"}</h1>
+        {isGroup && <button className="btn btn--primary" style={{ marginLeft: "auto", position: "relative" }} disabled={picked.length === 0} onClick={() => { setError(""); setMode("name"); }}>Next</button>}
       </div>
-      {!isGroup && (!term || "note to self".includes(term)) && (
-        <button className="pick-row" onClick={async () => {
-          try {
-            const conv = await api.post<ConversationDetail>("/conversations/note-to-self");
-            qc.invalidateQueries({ queryKey: keys.conversationsAll });
-            onClose();
-            router.push(`/c/${conv.id}`);
-          } catch (e) { setError(errorMessage(e)); }
-        }}>
-          <Avatar note id="note" name="Note to Self" size={40} />
-          <b>Note to Self</b>
-        </button>
-      )}
-      {!isGroup && (
-        <button className="pick-row" onClick={() => { setMode("group"); setPicked([]); }}>
-          <span className="avatar" style={{ width: 40, height: 40, background: "var(--blue)" }}><Users size={20} /></span>
-          <b>New group</b>
-        </button>
-      )}
-      {error && <span className="field__error">{error}</span>}
-      {people.length === 0 && <p className="muted" style={{ textAlign: "center" }}>{term.length >= 2 ? "No people found." : "Add contacts to see them here, or search to find people."}</p>}
-      {people.map((u) => (
-        <div key={u.id} className="pick-row" role="button" tabIndex={0} onClick={() => (isGroup ? toggle(u) : !busy && openDirect(u))} onKeyDown={(e) => e.key === "Enter" && (isGroup ? toggle(u) : openDirect(u))}>
-          <Avatar id={u.id} name={u.display_name} src={u.avatar_url} size={40} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600 }}>{u.display_name}</div>
-            <div className="muted" style={{ fontSize: 12 }}>{u.username ? `@${u.username}` : u.phone_number}</div>
-          </div>
-          {isGroup && picked.some((p) => p.id === u.id) && <Check size={18} color="var(--blue)" />}
-          {!isGroup && !u.is_contact && (
-            <button className="icon-btn" aria-label="Add to contacts" title="Add to contacts" onClick={(e) => { e.stopPropagation(); void addContact(u); }}>
-              <UserPlus size={18} />
-            </button>
-          )}
+      <div className="search-row">
+        <div className="search">
+          <Search size={18} />
+          <input id="nc-search" autoFocus placeholder="Name, username, or number" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search people" />
         </div>
-      ))}
-    </Modal>
+      </div>
+      <div className="list-scroll">
+        {!isGroup && !term && (
+          <>
+            <button className="nc-row" onClick={() => { setMode("group"); setPicked([]); }}><span className="nc-row__icon"><Users size={20} /></span><span className="nc-row__name">New group</span></button>
+            <button className="nc-row" onClick={() => seed("@")}><span className="nc-row__icon"><AtSign size={20} /></span><span className="nc-row__name">Find by username</span></button>
+            <button className="nc-row" onClick={() => seed("+")}><span className="nc-row__icon"><Hash size={20} /></span><span className="nc-row__name">Find by phone number</span></button>
+          </>
+        )}
+        {error && <span className="field__error" style={{ padding: "0 16px" }}>{error}</span>}
+        {(people.length > 0 || showNote) && <div className="list-section">Contacts</div>}
+        {showNote && (
+          <button className="nc-row" onClick={async () => {
+            try {
+              const conv = await api.post<ConversationDetail>("/conversations/note-to-self");
+              qc.invalidateQueries({ queryKey: keys.conversationsAll });
+              onClose();
+              router.push(`/c/${conv.id}`);
+            } catch (e) { setError(errorMessage(e)); }
+          }}>
+            <Avatar note id="note" name="Note to Self" size={40} />
+            <span className="nc-row__name">Note to Self</span>
+            <BadgeCheck size={16} color="var(--blue-solid)" aria-label="Verified" />
+          </button>
+        )}
+        {people.length === 0 && !showNote && <p className="muted" style={{ textAlign: "center" }}>{term.length >= 2 ? "No people found." : "Type a name, username or number."}</p>}
+        {people.map((u) => (
+          <div key={u.id} className="nc-row" role="button" tabIndex={0} onClick={() => (isGroup ? toggle(u) : !busy && openDirect(u))} onKeyDown={(e) => e.key === "Enter" && (isGroup ? toggle(u) : openDirect(u))}>
+            <Avatar id={u.id} name={u.display_name} src={u.avatar_url} size={40} />
+            <span className="nc-row__name">{u.display_name}</span>
+            {isGroup && picked.some((x) => x.id === u.id) && <Check size={18} color="var(--blue-solid)" />}
+            {!isGroup && !u.is_contact && (
+              <button className="icon-btn" aria-label="Add to contacts" title="Add to contacts" onClick={(e) => { e.stopPropagation(); void addContact(u); }}><UserPlus size={18} /></button>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

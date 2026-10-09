@@ -1,5 +1,5 @@
 "use client";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Contrast, LogOut, Pencil, User as UserIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,7 +17,7 @@ import { DevicesSettings } from "@/components/dialogs/DevicesSettings";
 import { PrivacySettings } from "@/components/dialogs/PrivacySettings";
 import { usePrefs } from "@/store/prefs";
 
-function PrefRow({ label, sub, k }: { label: string; sub: string; k: "linkPreviews" | "sendWithEnter" | "notifyToasts" | "notifyContent" | "sounds" | "desktopNotify" }) {
+function PrefRow({ label, sub, k }: { label: string; sub: string; k: "linkPreviews" | "sendWithEnter" | "incomingCalls" | "notifyToasts" | "notifyContent" | "sounds" | "desktopNotify" }) {
   const on = usePrefs((s) => s[k]);
   return (
     <div className="setting-row">
@@ -76,50 +76,82 @@ export default function SettingsSection() {
     router.replace("/login");
   }
 
+  const title = section === "profile" ? "Profile" : meta?.label ?? "Settings";
   return (
     <div className="settings has-section">
       <div className="settings__content">
-        <Link href="/settings" className="icon-btn back-btn" aria-label="Back to settings"><ChevronLeft size={22} /></Link>
-        <h2>{meta?.label ?? "Settings"}</h2>
-        {section === "general" && user && (
+        <div className="settings__title">
+          <Link href="/settings" className="icon-btn back-btn" aria-label="Back to settings"><ChevronLeft size={22} /></Link>
+          <h2>{title}</h2>
+        </div>
+        <div className="settings__inner">
+        {section === "profile" && user && (
           <>
-            <div className="detail-hero"><Avatar id={user.id} name={user.display_name} src={user.avatar_url} size={80} /><div className="muted">{user.username ? `@${user.username}` : user.phone_number}</div></div>
-            <div className="field"><label htmlFor="n">Name</label><input id="n" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} /></div>
-            <div className="field" style={{ marginTop: 12 }}><label htmlFor="a">About</label><input id="a" value={about} maxLength={140} onChange={(e) => setAbout(e.target.value)} /></div>
-            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <Button variant="primary" loading={busy} onClick={save} disabled={!name.trim()}>Save</Button>
-              <Button variant="danger" onClick={signOut}>Log out</Button>
+            <div className="profile-hero"><Avatar id={user.id} name={user.display_name} src={user.avatar_url} size={108} /></div>
+            <div className="card">
+              <label className="field-row" htmlFor="n"><UserIcon size={20} /><input id="n" placeholder="Name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} /></label>
+              <label className="field-row" htmlFor="a"><Pencil size={20} /><input id="a" placeholder="About" value={about} maxLength={140} onChange={(e) => setAbout(e.target.value)} /></label>
+            </div>
+            <p className="card-note">Your profile and changes to it will be visible to people you message, contacts and groups.</p>
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+              <Button variant="primary" loading={busy} onClick={save} disabled={!name.trim() || (name.trim() === user.display_name && about.trim() === (user.about ?? ""))}>Save</Button>
             </div>
           </>
         )}
         {section === "contacts" && <ContactsSettings />}
         {section === "appearance" && (
-          <div className="setting-row">
-            <div>Theme<small>Choose light, dark, or follow your system.</small></div>
-            <div className="seg" role="group" aria-label="Theme">
-              {(["system", "light", "dark"] as ThemePref[]).map((t) => (
-                <button key={t} className={theme === t ? "is-on" : ""} onClick={() => useUi.getState().setTheme(t)}>{t[0].toUpperCase() + t.slice(1)}</button>
-              ))}
+          <div className="card">
+            <div className="setting-row">
+              <span className="setting-row__icon"><Contrast size={20} /></span>
+              <div>Theme</div>
+              <select className="pill-select" aria-label="Theme" value={theme} onChange={(e) => useUi.getState().setTheme(e.target.value as ThemePref)}>
+                {(["system", "light", "dark"] as ThemePref[]).map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+              </select>
             </div>
           </div>
         )}
         {section === "chats" && (
-          <>
-            <PrefRow k="linkPreviews" label="Generate link previews" sub="Show a card for the first link in a message. The preview is fetched by the server, never by the sender's device." />
+          <div className="card">
+            <PrefRow k="linkPreviews" label="Generate link previews" sub="Retrieve link previews directly from websites for messages you send." />
             <PrefRow k="sendWithEnter" label="Send with Enter" sub="On: Enter sends and Shift+Enter adds a line. Off: Ctrl/Cmd+Enter sends." />
-          </>
+          </div>
+        )}
+        {section === "calls" && (
+          <div className="card">
+            <PrefRow k="incomingCalls" label="Enable incoming calls" sub="When off, incoming calls are declined automatically." />
+          </div>
         )}
         {section === "notifications" && (
           <>
-            <PrefRow k="notifyToasts" label="Message notifications" sub="Show a banner when a message arrives in a chat you're not looking at." />
-            {<DesktopNotifyRow />}
-            <PrefRow k="notifyContent" label="Show message content" sub="Include the message text in the banner." />
-            <PrefRow k="sounds" label="Play sounds" sub="Play a short chime for new messages." />
+            <div className="card">
+              <PrefRow k="notifyToasts" label="Enable notifications" sub="Show a banner when a message arrives in a chat you're not looking at." />
+              <DesktopNotifyRow />
+              <PrefRow k="notifyContent" label="Show message content" sub="Include the message text in the banner." />
+            </div>
+            <h3 className="settings__h">Sounds</h3>
+            <div className="card">
+              <PrefRow k="sounds" label="In-chat message sounds" sub="Hear a notification sound for sent and received messages while in the chat." />
+            </div>
           </>
         )}
         {section === "privacy" && <PrivacySettings />}
-        {section === "devices" && <DevicesSettings />}
+        {section === "devices" && (
+          <>
+            <div className="card"><button className="setting-row setting-row--btn is-danger" onClick={signOut}><LogOut size={20} /><div>Log out</div></button></div>
+            <h3 className="settings__h">Linked devices</h3>
+            <div className="card"><DevicesSettings /></div>
+          </>
+        )}
+        {section === "general" && (
+          <div className="card"><div className="setting-row"><div>Language<small>English</small></div></div></div>
+        )}
+        {(section === "donate" || section === "data" || section === "backups") && (
+          <div className="card"><div className="setting-row"><div>Not available in this demo<small>
+            {section === "donate" ? "Donations go through Signal's real service, which this clone doesn't connect to." : section === "data" ? "Media auto-download and quality settings aren't implemented; images and files are always fetched on demand." : "Messages live in this app's own database, so there's nothing to back up to a device."}
+          </small></div></div></div>
+        )}
         {!meta && <p className="muted">Unknown section.</p>}
+        </div>
       </div>
     </div>
   );

@@ -141,8 +141,10 @@ def test_call_decline_busy_unavailable_and_blocked(client):
     a, b, c = login(client, "alice", "Alice"), login(client, "bob", "Bob"), login(client, "carol", "Carol")
     conv, conv_ac = direct(client, a, b), direct(client, a, c)
     with client.websocket_connect(f"/ws?ticket={ticket(client, a)}") as wa:
-        wa.send_json({"event": "call.invite", "conversation_id": conv, "video": False})  # Bob offline
-        assert wait_for(wa, "call.ended")["payload"]["reason"] == "unavailable"
+        wa.send_json({"event": "call.invite", "conversation_id": conv, "video": False})  # Bob offline: it still rings
+        off_id = wait_for(wa, "call.ringing")["payload"]["call_id"]
+        wa.send_json({"event": "call.end", "call_id": off_id})  # Alice gives up
+        wait_for(wa, "call.ended")
         with client.websocket_connect(f"/ws?ticket={ticket(client, b)}") as wb, client.websocket_connect(f"/ws?ticket={ticket(client, c)}") as wc:
             wa.send_json({"event": "call.invite", "conversation_id": conv, "video": False})
             cid = wait_for(wb, "call.incoming")["payload"]["call_id"]

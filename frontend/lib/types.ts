@@ -37,7 +37,8 @@ export type SystemEvent = {
     | "member_left"
     | "title_changed"
     | "disappearing_changed"
-    | "call";
+    | "call"
+    | "request_accepted";
   video?: boolean;
   outcome?: "completed" | "missed" | "declined";
   duration?: number;
@@ -109,6 +110,7 @@ export type ConversationListItem = {
   is_note_to_self: boolean;
   blocked: boolean;
   is_request: boolean;
+  groups_in_common?: number;
 };
 
 export type Member = {
@@ -188,3 +190,8 @@ export type Story = { id: string; kind: "TEXT" | "IMAGE"; body: string | null; b
 export type StoryGroup = { user: User; stories: Story[]; all_viewed: boolean };
 export type StoryFeed = { mine: Story[]; others: StoryGroup[] };
 export type DeviceSession = { id: string; device: string; created_at: string; last_used_at: string; current: boolean };
+
+export type CallEntry = {
+  id: number; conversation_id: string; created_at: string; video: boolean;
+  outcome: "completed" | "missed" | "declined" | string | null; duration: number; outgoing: boolean; peer: User | null;
+};

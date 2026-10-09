@@ -1,6 +1,7 @@
 "use client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellOff, Camera, LogOut, Pencil, ShieldCheck, Timer, UserPlus, Webhook } from "lucide-react";
+import { Ban, Bell, BellOff, Camera, LogOut, Pencil, Search, ShieldCheck, Timer, UserPlus, Video, Webhook } from "lucide-react";
+import { startCall } from "@/lib/calls";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
@@ -20,7 +21,7 @@ import { MoreHorizontal } from "lucide-react";
 
 const TIMERS = [0, 30, 300, 3600, 28800, 86400, 604800, 2419200];
 
-export function DetailsPanel({ convId, onClose }: { convId: string; onClose: () => void }) {
+export function DetailsPanel({ convId, onClose, onSearch }: { convId: string; onClose: () => void; onSearch: () => void }) {
   const qc = useQueryClient();
   const router = useRouter();
   const meId = useAuth((s) => s.user!.id);
@@ -83,35 +84,45 @@ export function DetailsPanel({ convId, onClose }: { convId: string; onClose: () 
         {isGroup && <div className="muted">{active.length} members</div>}
       </div>
 
-      <div className="setting-row">
-        <span style={{ display: "flex", gap: 10, alignItems: "center" }}><BellOff size={18} /> Mute notifications</span>
-        <Toggle label="Mute notifications" checked={muted} onChange={(on) => run(() => api.patch(`/conversations/${convId}/me`, { muted_until: on ? "2999-01-01T00:00:00.000Z" : null }))} />
+      <div className="info-actions">
+        {!isGroup && peer && !c.blocked && !c.is_request && (
+          <button onClick={() => { onClose(); void startCall(c.id, peer, true); }}><span><Video size={20} /></span>Video</button>
+        )}
+        <button onClick={() => run(() => api.patch(`/conversations/${convId}/me`, { muted_until: muted ? null : "2999-01-01T00:00:00.000Z" }))}>
+          <span>{muted ? <Bell size={20} /> : <BellOff size={20} />}</span>{muted ? "Unmute" : "Mute"}
+        </button>
+        <button onClick={() => { onClose(); onSearch(); }}><span><Search size={20} /></span>Search</button>
       </div>
-      <div className="setting-row">
-        <span style={{ display: "flex", gap: 10, alignItems: "center" }}><Timer size={18} /> Disappearing messages</span>
-        <select value={c.disappearing_seconds} disabled={!canSetTimer} aria-label="Disappearing messages timer" onChange={(e) => run(() => api.patch(`/conversations/${convId}`, { disappearing_seconds: Number(e.target.value) }))}>
-          {TIMERS.map((t) => <option key={t} value={t}>{formatTimer(t)}</option>)}
-        </select>
-      </div>
-      {!isGroup && peer && (
-        <>
+
+      <div className="card">
+        <div className="setting-row">
+          <span style={{ display: "flex", gap: 12, alignItems: "center", whiteSpace: "nowrap" }}><Timer size={20} /> Disappearing</span>
+          <select className="pill-select" value={c.disappearing_seconds} disabled={!canSetTimer} aria-label="Disappearing messages timer" onChange={(e) => run(() => api.patch(`/conversations/${convId}`, { disappearing_seconds: Number(e.target.value) }))}>
+            {TIMERS.map((t) => <option key={t} value={t}>{formatTimer(t)}</option>)}
+          </select>
+        </div>
+        {!isGroup && peer && (
           <button className="setting-row" style={{ width: "100%", textAlign: "left" }} onClick={() => setSafety(true)}>
-            <span style={{ display: "flex", gap: 10, alignItems: "center" }}><ShieldCheck size={18} /> View safety number</span>
+            <span style={{ display: "flex", gap: 12, alignItems: "center" }}><ShieldCheck size={20} /> View safety number</span>
           </button>
-          {!peerIsContact && (
-            <button className="setting-row" style={{ width: "100%", textAlign: "left" }} onClick={() => run(async () => { await api.post("/contacts", { user_id: peer.id }); qc.invalidateQueries({ queryKey: keys.contacts }); })}>
-              <span style={{ display: "flex", gap: 10, alignItems: "center" }}><UserPlus size={18} /> Add to contacts</span>
-            </button>
-          )}
-        </>
-      )}
+        )}
+        {!isGroup && peer && !peerIsContact && (
+          <button className="setting-row" style={{ width: "100%", textAlign: "left" }} onClick={() => run(async () => { await api.post("/contacts", { user_id: peer.id }); qc.invalidateQueries({ queryKey: keys.contacts }); })}>
+            <span style={{ display: "flex", gap: 12, alignItems: "center" }}><UserPlus size={20} /> Add to contacts</span>
+          </button>
+        )}
+      </div>
 
       {isGroup && (
-        <section style={{ marginTop: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <h3>Members</h3>
-            {admin && <Button variant="ghost" onClick={() => setAdding(true)}><UserPlus size={16} /> Add</Button>}
+        <div className="card">
+          <div className="setting-row">
+            <b>{active.length} {active.length === 1 ? "member" : "members"}</b>
           </div>
+          {admin && (
+            <button className="setting-row" style={{ width: "100%", textAlign: "left" }} onClick={() => setAdding(true)}>
+              <span style={{ display: "flex", gap: 12, alignItems: "center" }}><span className="avatar avatar--icon" style={{ width: 40, height: 40 }}><UserPlus size={18} /></span> Add members</span>
+            </button>
+          )}
           {active.map((m) => (
             <div className="member-row" key={m.user.id}>
               <Avatar id={m.user.id} name={m.user.display_name} src={m.user.avatar_url} size={40} />
@@ -128,15 +139,20 @@ export function DetailsPanel({ convId, onClose }: { convId: string; onClose: () 
               )}
             </div>
           ))}
-        </section>
+        </div>
       )}
 
       <InboundHooks convId={convId} canManage={!isGroup || admin} />
 
-      {isGroup && (
-        <Button variant="danger" style={{ marginTop: 20, width: "100%" }} onClick={() => setConfirm({ kind: "leave" })}>
-          <LogOut size={16} /> Leave group
-        </Button>
+      {(isGroup || (peer && !c.is_note_to_self)) && (
+        <div className="card card--danger">
+          {isGroup && <button className="setting-row" onClick={() => setConfirm({ kind: "leave" })}><span style={{ display: "flex", gap: 12, alignItems: "center" }}><LogOut size={20} /> Leave group</span></button>}
+          {!isGroup && peer && (
+            <button className="setting-row" onClick={() => run(async () => { if (c.blocked) await api.del(`/blocks/${peer.id}`); else await api.post(`/blocks/${peer.id}`); qc.invalidateQueries({ queryKey: keys.blocked }); })}>
+              <span style={{ display: "flex", gap: 12, alignItems: "center" }}><Ban size={20} /> {c.blocked ? "Unblock" : "Block"}</span>
+            </button>
+          )}
+        </div>
       )}
 
       {safety && peer && <SafetyNumber a={meId} b={peer.id} name={peer.display_name} onClose={() => setSafety(false)} />}
@@ -220,7 +236,7 @@ function InboundHooks({ convId, canManage }: { convId: string; canManage: boolea
           try { await api.post(`/conversations/${convId}/inbound-hooks`, { name: name.trim() }); setName(""); reload(); qc.invalidateQueries({ queryKey: keys.conversation(convId) }); }
           catch (err) { useUi.getState().toast(errorMessage(err), "error"); }
         }}>
-          <div className="field" style={{ flex: 1 }}><input placeholder="Hook name (e.g. CI)" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} aria-label="Hook name" /></div>
+          <div className="field" style={{ flex: 1, minWidth: 0 }}><input placeholder="Hook name (e.g. CI)" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} aria-label="Hook name" /></div>
           <Button type="submit" variant="primary">Create</Button>
         </form>
       )}
