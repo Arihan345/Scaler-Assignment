@@ -109,3 +109,47 @@ def test_deleted_message_event(client):
     with client.websocket_connect(f"/ws?ticket={ticket(client, b)}") as wb:
         client.delete(f"/api/messages/{m['id']}", headers=a["h"])
         assert recv_until(wb, "message.deleted")["payload"]["message_id"] == m["id"]
+
+
+# ------------------------------------------------------------------ calls (signaling)
+
+def wait_for(ws, event):
+    return recv_until(ws, event, limit=30)
+
+
+def test_call_flow_invite_accept_signal_end_and_logs_system_message(client):
+    a, b = login(client, "alice", "Alice"), login(client, "bob", "Bob")
+    conv = direct(client, a, b)
+    with client.websocket_connect(f"/ws?ticket={ticket(client, a)}") as wa, client.websocket_connect(f"/ws?ticket={ticket(client, b)}") as wb:
+        wa.send_json({"event": "call.invite", "conversation_id": conv, "video": True})
+        inc = wait_for(wb, "call.incoming")
+        assert inc["payload"]["video"] is True and inc["payload"]["caller"]["id"] == a["id"]
+        cid = inc["payload"]["call_id"]
+        wb.send_json({"event": "call.accept", "call_id": cid})
+        wait_for(wa, "call.accepted")
+        wa.send_json({"event": "call.signal", "call_id": cid, "data": {"sdp": "offer"}})
+        assert wait_for(wb, "call.signal")["payload"]["data"] == {"sdp": "offer"}
+        wb.send_json({"event": "call.signal", "call_id": cid, "data": {"sdp": "answer"}})
+        assert wait_for(wa, "call.signal")["payload"]["data"] == {"sdp": "answer"}
+        wa.send_json({"event": "call.end", "call_id": cid})
+        assert wait_for(wb, "call.ended")["payload"]["reason"] == "ended"
+        sysmsg = wait_for(wb, "message.new")["payload"]
+        assert sysmsg["type"] == "SYSTEM" and sysmsg["system_event"]["kind"] == "call" and sysmsg["system_event"]["outcome"] == "completed"
+
+
+def test_call_decline_busy_unavailable_and_blocked(client):
+    a, b, c = login(client, "alice", "Alice"), login(client, "bob", "Bob"), login(client, "carol", "Carol")
+    conv, conv_ac = direct(client, a, b), direct(client, a, c)
+    with client.websocket_connect(f"/ws?ticket={ticket(client, a)}") as wa:
+        wa.send_json({"event": "call.invite", "conversation_id": conv, "video": False})  # Bob offline
+        assert wait_for(wa, "call.ended")["payload"]["reason"] == "unavailable"
+        with client.websocket_connect(f"/ws?ticket={ticket(client, b)}") as wb, client.websocket_connect(f"/ws?ticket={ticket(client, c)}") as wc:
+            wa.send_json({"event": "call.invite", "conversation_id": conv, "video": False})
+            cid = wait_for(wb, "call.incoming")["payload"]["call_id"]
+            wa.send_json({"event": "call.invite", "conversation_id": conv_ac, "video": False})  # Alice is in a call
+            assert wait_for(wa, "call.ended")["payload"]["reason"] == "busy"
+            wb.send_json({"event": "call.decline", "call_id": cid})
+            assert wait_for(wa, "call.ended")["payload"]["reason"] == "declined"
+            client.post(f"/api/blocks/{c['id']}", headers=a["h"])
+            wa.send_json({"event": "call.invite", "conversation_id": conv_ac, "video": False})
+            assert wait_for(wa, "call.ended")["payload"]["reason"].startswith("error")

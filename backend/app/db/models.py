@@ -19,6 +19,10 @@ class User(Base):
     onboarded_at: Mapped[str | None] = mapped_column(String)  # NULL => route to onboarding
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     last_seen_at: Mapped[str | None] = mapped_column(String)
+    # Privacy settings (1 = on). They change what OTHER people can see about this user.
+    read_receipts: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    typing_indicators: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    show_online: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     __table_args__ = (
         CheckConstraint("phone_number IS NOT NULL OR username IS NOT NULL", name="ck_users_identity"),
     )
@@ -43,6 +47,15 @@ class Contact(Base):
     nickname: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (CheckConstraint("owner_id <> contact_id", name="ck_contacts_not_self"),)
+
+
+class Block(Base):
+    """`blocker_id` has blocked `blocked_id`: no direct messages in either direction."""
+    __tablename__ = "blocks"
+    blocker_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    blocked_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (CheckConstraint("blocker_id <> blocked_id", name="ck_blocks_not_self"),)
 
 
 class Conversation(Base):
@@ -81,6 +94,12 @@ class ConversationMember(Base):
     is_pinned: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     is_archived: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     muted_until: Mapped[str | None] = mapped_column(String)
+    marked_unread: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # What *I* have read. last_read_seq is the PUBLIC cursor other people see as read receipts; with read receipts
+    # turned off it stops advancing while own_read_seq keeps tracking my unread count.
+    own_read_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # 1 = a first message from someone who isn't my contact: hidden from the main list until I accept (Signal's "message request").
+    request_pending: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     __table_args__ = (
         CheckConstraint("role IN ('MEMBER','ADMIN')", name="ck_member_role"),
         Index("idx_members_user", "user_id", sqlite_where=text("left_at IS NULL")),
@@ -102,6 +121,8 @@ class Message(Base):
     deleted_at: Mapped[str | None] = mapped_column(String)
     expires_at: Mapped[str | None] = mapped_column(String)
     edited_at: Mapped[str | None] = mapped_column(String)
+    pinned_at: Mapped[str | None] = mapped_column(String)
+    mentions: Mapped[str | None] = mapped_column(Text)  # JSON list of mentioned user ids
     __table_args__ = (
         UniqueConstraint("conversation_id", "seq", name="uq_messages_conv_seq"),
         UniqueConstraint("sender_id", "conversation_id", "client_message_id", name="uq_messages_dedupe"),
@@ -183,3 +204,29 @@ class InboundWebhook(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     created_at: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class Story(Base):
+    """A 24-hour status post (text on a coloured background, or a photo). Visible to the author's contacts and DM partners."""
+    __tablename__ = "stories"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)  # TEXT | IMAGE
+    body: Mapped[str | None] = mapped_column(String)
+    bg: Mapped[str | None] = mapped_column(String)
+    file_path: Mapped[str | None] = mapped_column(String)
+    mime_type: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    expires_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("kind IN ('TEXT','IMAGE')", name="ck_story_kind"),
+        Index("ix_stories_user_expires", "user_id", "expires_at"),
+    )
+
+
+class StoryView(Base):
+    __tablename__ = "story_views"
+    story_id: Mapped[str] = mapped_column(ForeignKey("stories.id", ondelete="CASCADE"), primary_key=True)
+    viewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    viewed_at: Mapped[str] = mapped_column(String, nullable=False)
+    shared: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")  # 0 = viewer has receipts off

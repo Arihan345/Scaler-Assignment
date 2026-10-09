@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { configureApi } from "@/lib/api";
 import { useAuth } from "@/store/auth";
 import { useUi } from "@/store/ui";
+import { usePrefs } from "@/store/prefs";
 import { Toasts } from "@/components/ui/Toasts";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     useAuth.getState().hydrate();
     useUi.getState().initTheme();
+    usePrefs.getState().hydrate();
   }, []);
 
   useEffect(() => {

@@ -4,10 +4,10 @@ import { api } from "./api";
 import { keys } from "./query";
 import type { ConversationDetail, ConversationListItem, User } from "./types";
 
-export const useConversationList = (archived = false) =>
+export const useConversationList = (archived = false, requests = false) =>
   useQuery({
-    queryKey: keys.conversations(archived),
-    queryFn: () => api.get<ConversationListItem[]>(`/conversations?archived=${archived}`),
+    queryKey: keys.conversations(archived, requests),
+    queryFn: () => api.get<ConversationListItem[]>(`/conversations?archived=${archived}&requests=${requests}`),
   });
 
 export const useConversation = (id: string) =>
@@ -23,4 +23,8 @@ export function useUserSearch(q: string) {
     enabled: term.length >= 2,
     staleTime: 10_000,
   });
+}
+
+export function useBlocked() {
+  return useQuery({ queryKey: keys.blocked, queryFn: () => api.get<User[]>("/blocks") });
 }

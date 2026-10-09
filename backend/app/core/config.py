@@ -22,6 +22,7 @@ class Settings:
     run_background_tasks: bool = True
     sweeper_interval_s: float = 30.0
     webhook_poll_s: float = 2.0
+    link_preview_allow_private: bool = False  # tests only; never enable in production
 
     @property
     def is_dev(self) -> bool:

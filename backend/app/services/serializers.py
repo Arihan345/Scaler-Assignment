@@ -16,12 +16,20 @@ def user_dto(u: User, online: bool | None = None) -> dict:
         "phone_number": u.phone_number,
         "about": u.about or "",
         "avatar_url": u.avatar_url,
-        "last_seen_at": u.last_seen_at,
+        "last_seen_at": u.last_seen_at if u.show_online else None,
         "is_bot": bool(u.is_bot),
     }
     if online is not None:
-        d["is_online"] = online
+        d["is_online"] = bool(online) and bool(u.show_online)  # "show online status" off => never appear online
     return d
+
+
+def privacy_dto(u: User) -> dict:
+    return {
+        "read_receipts": bool(u.read_receipts),
+        "typing_indicators": bool(u.typing_indicators),
+        "show_online": bool(u.show_online),
+    }
 
 
 def _snippet(m: Message) -> str:
@@ -71,6 +79,9 @@ def messages_to_dto(db: Session, msgs: list[Message], viewer_id: str | None = No
         )
     reacts = reactions_map(db, ids)
 
+    # Signal's rule is reciprocal: if I don't share read receipts, I don't see anyone else's either.
+    viewer = db.get(User, viewer_id) if viewer_id else None
+    sees_read = viewer is None or bool(viewer.read_receipts)
     out = []
     for m in msgs:
         deleted = m.deleted_at is not None
@@ -78,6 +89,8 @@ def messages_to_dto(db: Session, msgs: list[Message], viewer_id: str | None = No
         status = None
         if viewer_id and m.sender_id == viewer_id and m.type != "SYSTEM" and not deleted:
             status = compute_status(m.seq, m.sender_id, members) if members is not None else "sent"
+            if status == "read" and not sees_read:
+                status = "delivered"
         out.append(
             {
                 "id": m.id,
@@ -105,6 +118,8 @@ def messages_to_dto(db: Session, msgs: list[Message], viewer_id: str | None = No
                 "expires_at": m.expires_at,
                 "deleted_at": m.deleted_at,
                 "edited_at": m.edited_at,
+                "pinned_at": None if deleted else m.pinned_at,
+                "mentions": [] if deleted or not m.mentions else json.loads(m.mentions),
                 "status": status,
             }
         )

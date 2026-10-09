@@ -2,10 +2,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellOff, Camera, LogOut, Pencil, ShieldCheck, Timer, UserPlus, Webhook } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { convTitle, formatTimer, isMuted } from "@/lib/format";
-import { useConversation, useContacts } from "@/lib/hooks";
+import { useConversation, useContacts, useUserSearch } from "@/lib/hooks";
 import { keys } from "@/lib/query";
 import type { ConversationDetail, InboundHook, Member, User } from "@/lib/types";
 import { useAuth } from "@/store/auth";
@@ -157,17 +157,30 @@ export function DetailsPanel({ convId, onClose }: { convId: string; onClose: () 
 
 function AddMembers({ conv, onClose }: { conv: ConversationDetail; onClose: () => void }) {
   const contacts = useContacts();
+  const [q, setQ] = useState("");
+  const search = useUserSearch(q);
   const [picked, setPicked] = useState<string[]>([]);
   const [error, setError] = useState("");
   const inGroup = new Set(conv.members.filter((m) => m.is_active).map((m) => m.user.id));
-  const candidates = (contacts.data ?? []).filter((u: User) => !inGroup.has(u.id));
+  const term = q.trim().toLowerCase();
+  // Contacts first (filtered locally), then anyone found by name / username / phone, so non-contacts can be added too.
+  const candidates = useMemo(() => {
+    const byId = new Map<string, User>();
+    for (const u of contacts.data ?? []) if (!term || u.display_name.toLowerCase().includes(term) || u.username?.toLowerCase().includes(term)) byId.set(u.id, u);
+    for (const u of search.data ?? []) if (!byId.has(u.id)) byId.set(u.id, u);
+    return [...byId.values()].filter((u) => !inGroup.has(u.id));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contacts.data, search.data, term, conv.members]);
   return (
     <Modal title="Add members" onClose={onClose} footer={
       <Button variant="primary" disabled={picked.length === 0} onClick={async () => {
         try { await api.post(`/conversations/${conv.id}/members`, { user_ids: picked }); onClose(); } catch (e) { setError(errorMessage(e)); }
       }}>Add</Button>
     }>
-      {candidates.length === 0 && <p className="muted">All your contacts are already in this group. Add more contacts from New chat.</p>}
+      <div className="search" style={{ margin: "0 0 10px" }}>
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, username or phone number" aria-label="Search people" />
+      </div>
+      {candidates.length === 0 && <p className="muted">{term ? "No one found." : "All your contacts are already in this group. Search by phone number to add someone else."}</p>}
       {candidates.map((u) => (
         <label key={u.id} className="pick-row">
           <input type="checkbox" checked={picked.includes(u.id)} onChange={() => setPicked((p) => (p.includes(u.id) ? p.filter((x) => x !== u.id) : [...p, u.id]))} />

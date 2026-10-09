@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import auth, conversations, messages, users, webhooks, ws
+from app.api import auth, conversations, messages, stories, users, webhooks, ws
 from app.core.config import settings
 from app.core.errors import AppError, app_error_handler, http_error_handler, validation_handler
 from app.db import engine, seed
@@ -65,7 +65,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_handler)
     app.add_exception_handler(StarletteHTTPException, http_error_handler)
 
-    for router in (auth.router, users.router, conversations.router, messages.router, webhooks.router):
+    for router in (auth.router, users.router, conversations.router, messages.router, stories.router, webhooks.router):
         app.include_router(router, prefix="/api")
     app.include_router(ws.router)
 

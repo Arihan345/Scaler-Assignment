@@ -18,7 +18,7 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8000      # seeds demo data when the DB is empty
-pytest                                          # 79 tests
+pytest                                          # 98 tests
 
 # frontend (Node 20+)
 cd frontend
@@ -35,7 +35,9 @@ npm run typecheck && npm test
 - Sent / delivered / read ticks (per-member cursors; group status = slowest eligible recipient)
 - Groups: create, rename, photo, add/remove members, admin roles, leave
 - Bonus: attachments (images/PDF/text), reactions, replies, edit (3-hour window), forward, delete for me / for everyone, in-chat search, saved drafts, disappearing messages, dark mode, responsive layout, keyboard shortcuts (Ctrl/Cmd+K search, Ctrl/Cmd+N new chat, Esc close)
-- Settings (General, Appearance with working theme; Chats, Notifications, Privacy as labelled placeholders); Stories and Linked devices open "coming soon" screens (calls are not included)
+- Signal-style extras: block/unblock (direct chats), Note to Self, mark as unread, pinned messages (up to 3, any member), multi-select (copy / forward / delete), All media gallery (Media / Files / Audio / Links), @mentions in groups, voice notes (MediaRecorder), link previews (server-side fetch with an SSRF guard)
+- Message requests (first message from a non-contact waits in a separate list until you Accept, Delete or Block; no read receipts are sent before you accept), Stories (24-hour text/photo posts for contacts and chat partners, with view tracking), Linked devices (list and unlink signed-in sessions), 1:1 voice and video calls (WebRTC; the backend only relays signaling over the WebSocket), forwarding of images/files, browser (OS-level) notifications
+- Settings: General, Appearance, Chats (link previews, Enter-to-send), Notifications (toasts, content, sound) and Privacy (read receipts, typing indicators, online status, blocked list) are all functional; calls are one-to-one only
 - Extra: outbound webhooks (retries with backoff, delivery log) and inbound webhooks that post as a bot
 
 ## Architecture
@@ -74,8 +76,12 @@ WebSocket `/ws?ticket=…` events: `message.new|edited|deleted|expired`, `receip
 - Render's free tier sleeps after idle (first request is slow) and its disk is ephemeral, so data resets on redeploy or restart; the app re-seeds demo data when the DB is empty. For durable data use a paid plan with a persistent disk and point `DATABASE_URL` / `UPLOAD_DIR` at it.
 
 ## Known limitations / trade-offs
-- No real encryption, SMS, or push notifications; calls are not included; stories and linked devices are placeholders.
+- No real encryption or SMS. Notifications use the browser Notification API while the app is open; true Web Push (closed browser) would need a service worker and VAPID keys.
+- Calls are 1:1 only, with STUN but no TURN relay, so they can fail behind strict NATs; call state is in memory (one backend process) and one tab per user should answer a call.
+- "Linked devices" means signed-in sessions: sign in with the same number elsewhere to link, unlink from Settings (no QR pairing).
 - Message list is paged (older messages load on scroll) rather than virtualized.
-- Forward resends text only (attachments aren't re-shared); no block/message-requests, mentions or voice notes.
+- Read receipts and typing indicators are reciprocal, as in Signal: turning them off hides yours and also hides other people's from you. Blocking applies to direct chats only; the blocked sender just sees a generic "couldn't be delivered".
+- Link previews fetch server-side with http(s)-only, public-IP-only, redirect re-validation, size and time caps. A DNS-rebinding race is the residual risk, documented in `services/link_preview.py`. Previews need outbound internet from the backend.
+- Voice notes need microphone permission and a secure origin (localhost or https).
 - Single backend process: presence and typing state are in memory, so horizontal scaling would need a shared pub/sub.
 - Visual tokens in `frontend/styles/tokens.css` approximate Signal Desktop and can be tuned against screenshots.

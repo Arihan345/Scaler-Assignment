@@ -8,7 +8,8 @@ import anyio
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.db.engine import session_scope
-from app.realtime import tickets
+from app.db.models import User
+from app.realtime import calls, tickets
 from app.realtime.connection_manager import manager
 from app.realtime.dispatcher import envelope, publish
 from app.services import user_service
@@ -30,6 +31,18 @@ def _members_if_active(user_id: str, conversation_id: str) -> list[str] | None:
         return active_member_ids(db, conversation_id)
 
 
+def _shares_presence(user_id: str) -> bool:
+    with session_scope() as db:
+        u = db.get(User, user_id)
+        return bool(u and u.show_online)
+
+
+def _shares_typing(user_id: str) -> bool:
+    with session_scope() as db:
+        u = db.get(User, user_id)
+        return bool(u and u.typing_indicators)
+
+
 def _peers(user_id: str) -> list[str]:
     with session_scope() as db:
         return user_service.presence_peer_ids(db, user_id)
@@ -41,6 +54,8 @@ def _touch_last_seen(user_id: str) -> str:
 
 
 async def _announce(user_id: str, online: bool, last_seen_at: str | None = None) -> None:
+    if not await anyio.to_thread.run_sync(_shares_presence, user_id):
+        return  # "show online status" is off: nobody is told
     peers = await anyio.to_thread.run_sync(_peers, user_id)
     await publish([Event(peers, "presence.updated", None, {"user_id": user_id, "online": online, "last_seen_at": last_seen_at})])
 
@@ -58,6 +73,8 @@ async def _handle_typing(user_id: str, conversation_id: str, started: bool) -> s
     members = await anyio.to_thread.run_sync(_members_if_active, user_id, conversation_id)
     if members is None:
         return "You are not a member of this conversation"
+    if not await anyio.to_thread.run_sync(_shares_typing, user_id):
+        return None  # typing indicators are off: stay silent
     others = [u for u in members if u != user_id]
     key = (conversation_id, user_id)
     old = _typing_tasks.pop(key, None)
@@ -95,6 +112,14 @@ async def websocket_endpoint(websocket: WebSocket, ticket: str | None = Query(de
                 err = await _handle_typing(user_id, conv, event == "typing.start") if isinstance(conv, str) else "Missing conversation_id"
                 if err:
                     await websocket.send_json(envelope("error", conv if isinstance(conv, str) else None, {"message": err}))
+            elif event == "call.invite" and isinstance(msg.get("conversation_id"), str):
+                await calls.invite(user_id, msg["conversation_id"], bool(msg.get("video")))
+            elif event == "call.accept" and isinstance(msg.get("call_id"), str):
+                await calls.accept(user_id, msg["call_id"])
+            elif event in ("call.decline", "call.end") and isinstance(msg.get("call_id"), str):
+                await calls.hang_up(user_id, msg["call_id"], declined=event == "call.decline")
+            elif event == "call.signal" and isinstance(msg.get("call_id"), str):
+                await calls.relay(user_id, msg["call_id"], msg.get("data"))
             else:
                 await websocket.send_json(envelope("error", None, {"message": f"Unknown event: {event}"}))
     except WebSocketDisconnect:
@@ -103,5 +128,6 @@ async def websocket_endpoint(websocket: WebSocket, ticket: str | None = Query(de
         log.exception("websocket crashed")
     finally:
         if manager.disconnect(user_id, websocket):  # last tab closed
+            calls.drop_user(user_id)
             seen = await anyio.to_thread.run_sync(_touch_last_seen, user_id)
             await _announce(user_id, False, seen)

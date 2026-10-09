@@ -13,7 +13,10 @@ export type User = {
   onboarded?: boolean;
   is_contact?: boolean;
   nickname?: string | null;
+  privacy?: Privacy;
 };
+
+export type Privacy = { read_receipts: boolean; typing_indicators: boolean; show_online: boolean };
 
 export type Reaction = { emoji: string; count: number; user_ids: string[] };
 
@@ -33,7 +36,11 @@ export type SystemEvent = {
     | "member_removed"
     | "member_left"
     | "title_changed"
-    | "disappearing_changed";
+    | "disappearing_changed"
+    | "call";
+  video?: boolean;
+  outcome?: "completed" | "missed" | "declined";
+  duration?: number;
   actor?: string;
   target?: string;
   title?: string;
@@ -62,8 +69,22 @@ export type Message = {
   expires_at: string | null;
   deleted_at: string | null;
   edited_at: string | null;
+  pinned_at: string | null;
+  mentions: string[];
   status: ServerStatus | null;
 };
+
+export type MediaKind = "media" | "files" | "audio" | "links";
+export type MediaItem = {
+  kind: string;
+  message_id: number;
+  seq: number;
+  sender_id: string | null;
+  created_at: string;
+  attachment?: Attachment;
+  url?: string;
+};
+export type LinkPreview = { url: string; title: string; description: string; image: string | null; site: string | null };
 
 export type LastMessage = Message & { sender_name: string | null };
 
@@ -83,6 +104,11 @@ export type ConversationListItem = {
   disappearing_seconds: number;
   my_role: "ADMIN" | "MEMBER";
   peer: User | null;
+  marked_unread: boolean;
+  has_unread_mention: boolean;
+  is_note_to_self: boolean;
+  blocked: boolean;
+  is_request: boolean;
 };
 
 export type Member = {
@@ -118,6 +144,7 @@ export type OutboxItem = {
   body: string;
   reply_to: Message | null;
   attachment_ids: string[];
+  mentions?: string[];
   attachment_previews: { id: string; name: string; mime: string; url: string | null }[];
   status: "sending" | "failed";
   created_at: string;
@@ -156,3 +183,8 @@ export type InboundHook = {
   bot_user_id: string;
   is_active: boolean;
 };
+
+export type Story = { id: string; kind: "TEXT" | "IMAGE"; body: string | null; bg: string | null; created_at: string; expires_at: string; viewed: boolean; has_media: boolean; view_count?: number };
+export type StoryGroup = { user: User; stories: Story[]; all_viewed: boolean };
+export type StoryFeed = { mine: Story[]; others: StoryGroup[] };
+export type DeviceSession = { id: string; device: string; created_at: string; last_used_at: string; current: boolean };

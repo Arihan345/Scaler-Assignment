@@ -1,43 +1,61 @@
-/* Design tokens. PLACEHOLDER values approximating Signal Desktop; swap with measured values from screenshots. */
+/* Design tokens, tuned to Signal Desktop (light + dark). Everything visual reads from these. */
 :root {
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
-  --blue: #3a76f0;
-  --blue-hover: #2c64d9;
+
+  --blue: #2c6bed;
+  --blue-hover: #1f5bd6;
+  --blue-soft: #e3ecfd;
+
   --bg: #ffffff;
   --bg-pane: #ffffff;
   --bg-nav: #f6f6f6;
-  --bg-hover: #f0f0f0;
-  --bg-selected: #e4ebfb;
-  --bg-input: #f0f0f0;
+  --bg-hover: #f3f3f4;
+  --bg-selected: #e9e9eb;
+  --bg-input: #f1f1f2;
   --bg-timeline: #ffffff;
+
   --text: #1b1b1b;
-  --text-secondary: #6e6e73;
-  --border: #e5e5e7;
+  --text-secondary: #707075;
+  --border: #e6e6e8;
+
   --bubble-in: #e9e9eb;
   --bubble-in-text: #1b1b1b;
-  --bubble-out: #2e5be8;
+  --bubble-out: #2c6bed;
   --bubble-out-text: #ffffff;
+
   --danger: #d93025;
   --success: #1f9d55;
   --online: #2db84d;
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
-  --radius-bubble: 18px;
-  --list-w: 420px;
-  --nav-w: 76px;
+  --shadow: 0 6px 28px rgba(0, 0, 0, 0.16);
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.12);
+
+  --radius-bubble: 20px;
+  --radius-tail: 5px;
+  --list-w: 400px;
+  --nav-w: 72px;
 }
+
 :root[data-theme="dark"] {
+  --blue: #5b8cf5;
+  --blue-hover: #7aa0f7;
+  --blue-soft: #243253;
+
   --bg: #1b1b1b;
   --bg-pane: #1b1b1b;
-  --bg-nav: #232323;
-  --bg-hover: #262626;
+  --bg-nav: #161616;
+  --bg-hover: #242424;
   --bg-selected: #2e2e2e;
-  --bg-input: #2e2e2e;
+  --bg-input: #2a2a2a;
   --bg-timeline: #1b1b1b;
-  --text: #f1f1f1;
-  --text-secondary: #9a9aa0;
-  --border: #2c2c2e;
-  --bubble-in: #3b3b3b;
-  --bubble-in-text: #f1f1f1;
-  --bubble-out: #3a76f0;
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+
+  --text: #f2f2f2;
+  --text-secondary: #9b9ba1;
+  --border: #2d2d2f;
+
+  --bubble-in: #363636;
+  --bubble-in-text: #f2f2f2;
+  --bubble-out: #2c6bed;
+
+  --shadow: 0 6px 28px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.5);
 }

@@ -18,15 +18,15 @@ export function Modal({ title, onClose, children, footer, variant = "modal", wid
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         onClose();
       }
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.focus();
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       prev?.focus?.();
     };
   }, [onClose]);

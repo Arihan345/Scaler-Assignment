@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import not_found, validation
 from app.core.security import normalize_identifier
 from app.core.time import now_iso
-from app.db.models import Contact, User
+from app.db.models import Block, Contact, User
 from app.services import serializers
 
 
@@ -86,3 +86,46 @@ def touch_last_seen(db: Session, user_id: str) -> str:
         u.last_seen_at = now
         db.commit()
     return now
+
+
+# ---------------------------------------------------------------- privacy + blocking
+
+def update_privacy(db: Session, me: User, fields: dict) -> None:
+    for key in ("read_receipts", "typing_indicators", "show_online"):
+        if key in fields:
+            setattr(me, key, 1 if fields[key] else 0)
+    db.commit()
+
+
+def is_blocked_between(db: Session, a: str, b: str) -> str | None:
+    """'a' if a blocked b, 'b' if b blocked a, else None."""
+    if db.get(Block, (a, b)) is not None:
+        return "a"
+    if db.get(Block, (b, a)) is not None:
+        return "b"
+    return None
+
+
+def block_user(db: Session, me: User, target_id: str) -> None:
+    if target_id == me.id:
+        raise validation("You can't block yourself")
+    target = db.get(User, target_id)
+    if target is None or target.is_bot:
+        raise not_found("User")
+    if db.get(Block, (me.id, target_id)) is None:
+        db.add(Block(blocker_id=me.id, blocked_id=target_id, created_at=now_iso()))
+        db.commit()
+
+
+def unblock_user(db: Session, me: User, target_id: str) -> None:
+    b = db.get(Block, (me.id, target_id))
+    if b is not None:
+        db.delete(b)
+        db.commit()
+
+
+def list_blocked(db: Session, me: User) -> list[dict]:
+    rows = db.execute(
+        select(User).join(Block, Block.blocked_id == User.id).where(Block.blocker_id == me.id).order_by(User.display_name)
+    ).scalars()
+    return [serializers.user_dto(u) for u in rows]

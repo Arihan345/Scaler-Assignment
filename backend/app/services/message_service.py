@@ -5,16 +5,19 @@ Broadcasting is the caller's job and happens only after the commit.
 """
 import json
 import os
+import re
+import shutil
 
 from sqlalchemy import and_, delete, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import AppError, forbidden, not_found, validation
+from app.core.ids import new_id
 from app.core.time import add_seconds, now_iso
 from app.db.engine import begin_write
 from app.db.models import Attachment, Conversation, ConversationMember, Message, MessageHidden, MessageReaction, User
-from app.services import receipts, serializers, webhook_service
+from app.services import receipts, serializers, user_service, webhook_service
 from app.services.events import Event
 from app.services.membership import (
     active_member_ids,
@@ -49,6 +52,7 @@ def insert_message(
     reply_to_id: int | None = None,
     client_message_id: str | None = None,
     expires_at: str | None = None,
+    mentions: list[str] | None = None,
 ) -> Message:
     seq = allocate_seq(db, conversation_id, now)
     msg = Message(
@@ -62,6 +66,7 @@ def insert_message(
         reply_to_id=reply_to_id,
         created_at=now,
         expires_at=expires_at,
+        mentions=json.dumps(mentions) if mentions else None,
     )
     db.add(msg)
     db.flush()
@@ -88,6 +93,32 @@ def _all_members(db: Session, conversation_id: str) -> list[ConversationMember]:
 
 # ---------------------------------------------------------------- send
 
+def _copy_attachments_for_forward(db: Session, user: User, source_id: int, target_conv: str) -> list[Attachment]:
+    """Forwarding re-shares files: each is physically copied, so deleting the original never breaks the forward."""
+    src = db.get(Message, source_id)
+    if src is None or src.deleted_at:
+        raise not_found("Message")
+    member = require_member_for_read(db, user.id, src.conversation_id)
+    if src.seq <= member.joined_seq or (member.left_seq is not None and src.seq > member.left_seq):
+        raise forbidden("You can't forward this message")
+    out: list[Attachment] = []
+    for a in db.execute(select(Attachment).where(Attachment.message_id == src.id)).scalars():
+        if not os.path.exists(a.storage_path):
+            continue
+        new_id_ = new_id()
+        ext = os.path.splitext(a.storage_path)[1]
+        path = os.path.join(os.path.dirname(a.storage_path), f"{new_id_}{ext}")
+        shutil.copyfile(a.storage_path, path)
+        copy = Attachment(
+            id=new_id_, uploader_id=user.id, conversation_id=target_conv, file_name=a.file_name, mime_type=a.mime_type,
+            size_bytes=a.size_bytes, storage_path=path, width=a.width, height=a.height, created_at=now_iso(),
+        )
+        db.add(copy)
+        out.append(copy)
+    db.flush()
+    return out
+
+
 def _find_dup(db: Session, sender_id: str, conversation_id: str, client_message_id: str) -> Message | None:
     return db.execute(
         select(Message).where(
@@ -107,12 +138,14 @@ def send_message(
     client_message_id: str | None = None,
     reply_to_id: int | None = None,
     attachment_ids: list[str] | None = None,
+    mentions: list[str] | None = None,
+    forward_from_id: int | None = None,
 ) -> tuple[Message, bool, list[Event]]:
     """Returns (message, created, events). A retry with the same client_message_id returns the
     original message with created=False and no events (idempotent)."""
     body = (body or "").strip()
     attachment_ids = list(dict.fromkeys(attachment_ids or []))
-    if not body and not attachment_ids:
+    if not body and not attachment_ids and forward_from_id is None:
         raise validation("Message is empty")
     if len(body) > settings.max_body_chars:
         raise validation(f"Message is longer than {settings.max_body_chars} characters")
@@ -124,7 +157,20 @@ def send_message(
         if dup is not None:  # checked under the write lock, so concurrent retries can't both insert
             db.rollback()
             return dup, False, []
+    member.request_pending = 0  # replying to a message request accepts it
     conv = get_conversation(db, conversation_id)
+    if conv.type == "DIRECT":
+        others = [m.user_id for m in _all_members(db, conversation_id) if m.user_id != user.id]
+        if others:
+            who = user_service.is_blocked_between(db, user.id, others[0])
+            if who == "a":
+                raise AppError("BLOCKED", "You blocked this person. Unblock them to send messages.", 403)
+            if who == "b":
+                raise AppError("BLOCKED", "Your message couldn't be delivered.", 403)
+    mention_ids: list[str] = []
+    if mentions:
+        active = set(active_member_ids(db, conversation_id))
+        mention_ids = [u for u in dict.fromkeys(mentions) if u in active and u != user.id]
 
     if reply_to_id is not None:
         target = db.get(Message, reply_to_id)
@@ -145,6 +191,10 @@ def send_message(
         )
         if len(atts) != len(attachment_ids):
             raise validation("Invalid attachment")
+    if forward_from_id is not None:
+        atts += _copy_attachments_for_forward(db, user, forward_from_id, conversation_id)
+        if not body and not atts:
+            raise validation("Message is empty")
     msg_type = "TEXT"
     if atts:
         msg_type = "IMAGE" if all((a.mime_type or "").startswith("image/") for a in atts) else "FILE"
@@ -153,10 +203,11 @@ def send_message(
     expires_at = add_seconds(now, conv.disappearing_seconds) if conv.disappearing_seconds else None
     msg = insert_message(
         db, conversation_id, user.id, now, msg_type, body or None,
-        reply_to_id=reply_to_id, client_message_id=client_message_id, expires_at=expires_at,
+        reply_to_id=reply_to_id, client_message_id=client_message_id, expires_at=expires_at, mentions=mention_ids,
     )
     for a in atts:
         a.message_id = msg.id
+    db.flush()  # autoflush is off: the DTO query below must see the bound attachments
 
     # The sender has, by definition, seen everything up to their own message.
     member.last_read_seq = max(member.last_read_seq, msg.seq)
@@ -258,13 +309,15 @@ def mark_read(db: Session, user: User, conversation_id: str, up_to_seq: int) -> 
     member = require_active_member(db, user.id, conversation_id)
     conv = get_conversation(db, conversation_id)
     target = max(0, min(int(up_to_seq), conv.last_seq))
-    if target <= member.last_read_seq and target <= member.last_delivered_seq:
-        db.commit()
-        return []
-    member.last_read_seq = max(member.last_read_seq, target)
+    member.marked_unread = 0  # opening/reading a chat clears a manual "mark as unread"
+    member.own_read_seq = max(member.own_read_seq, target)  # my own unread count always advances...
+    public_before = (member.last_read_seq, member.last_delivered_seq)
+    if db.get(User, user.id).read_receipts and not member.request_pending:  # ...others only see "read" if I share receipts and have accepted the chat
+        member.last_read_seq = max(member.last_read_seq, target)
     member.last_delivered_seq = max(member.last_delivered_seq, target)  # a read implies delivered
+    changed = (member.last_read_seq, member.last_delivered_seq) != public_before
     db.commit()
-    return [_receipt_event(db, conversation_id, member)]
+    return [_receipt_event(db, conversation_id, member)] if changed else []
 
 
 def get_receipts(db: Session, user: User, message_id: int) -> list[dict]:
@@ -276,10 +329,13 @@ def get_receipts(db: Session, user: User, message_id: int) -> list[dict]:
         raise forbidden("Message info is only available for your own messages")
     out = []
     users = {u.id: u for u in db.execute(select(User)).scalars()}
+    sees_read = bool(users[user.id].read_receipts)  # reciprocal: no read receipts for me => none shown to me
     for m in _all_members(db, msg.conversation_id):
         if not receipts.is_eligible(m, msg.seq, msg.sender_id):
             continue
         state = "read" if m.last_read_seq >= msg.seq else "delivered" if m.last_delivered_seq >= msg.seq else "sent"
+        if state == "read" and not sees_read:
+            state = "delivered"
         out.append({"user": serializers.user_dto(users[m.user_id]), "state": state})
     return out
 
@@ -305,6 +361,7 @@ def delete_message(db: Session, user: User, message_id: int) -> tuple[list[Event
     db.execute(delete(MessageReaction).where(MessageReaction.message_id == msg.id))
     msg.deleted_at = now_iso()
     msg.body = None
+    msg.pinned_at = None
     audience = active_member_ids(db, msg.conversation_id)
     webhook_service.enqueue_event(db, "message.deleted", msg.conversation_id, audience, {"message_id": msg.id, "seq": msg.seq})
     db.commit()
@@ -431,3 +488,89 @@ def unlink_files(paths: list[str]) -> None:
 def dto_for_viewer(db: Session, msg: Message, user: User) -> dict:
     """Message DTO including the sender-facing status (derived from members' cursors)."""
     return serializers.message_dto(db, msg, user.id, _all_members(db, msg.conversation_id))
+
+
+# ---------------------------------------------------------------- pinned messages
+
+MAX_PINNED = 3
+
+
+def set_pinned(db: Session, user: User, message_id: int, pinned: bool) -> list[Event]:
+    msg = db.get(Message, message_id)
+    if msg is None:
+        raise not_found("Message")
+    begin_write(db)
+    require_active_member(db, user.id, msg.conversation_id)
+    if msg.type == "SYSTEM" or msg.deleted_at:
+        raise validation("This message can't be pinned")
+    if pinned and not msg.pinned_at:
+        count = db.execute(
+            select(Message.id).where(Message.conversation_id == msg.conversation_id, Message.pinned_at.is_not(None))
+        ).all()
+        if len(count) >= MAX_PINNED:
+            raise validation(f"You can pin up to {MAX_PINNED} messages. Unpin one first.")
+        msg.pinned_at = now_iso()
+    elif not pinned:
+        msg.pinned_at = None
+    audience = active_member_ids(db, msg.conversation_id)
+    dto = serializers.message_dto(db, msg)
+    db.commit()
+    return [Event(audience, "message.edited", msg.conversation_id, dto)]  # same patch path as an edit
+
+
+def list_pinned(db: Session, user: User, conversation_id: str) -> list[dict]:
+    member = require_member_for_read(db, user.id, conversation_id)
+    rows = list(
+        db.execute(
+            select(Message)
+            .where(_visible(member, now_iso()), Message.pinned_at.is_not(None), Message.deleted_at.is_(None))
+            .order_by(Message.pinned_at.desc())
+        ).scalars()
+    )
+    return serializers.messages_to_dto(db, rows, user.id, _all_members(db, conversation_id))
+
+
+# ---------------------------------------------------------------- shared media / files / audio / links
+
+_URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+
+
+def list_media(db: Session, user: User, conversation_id: str, kind: str, limit: int = 120) -> list[dict]:
+    """Everything shared in a chat, newest first. kind: media | files | audio | links."""
+    if kind not in ("media", "files", "audio", "links"):
+        raise validation("Unknown media kind")
+    member = require_member_for_read(db, user.id, conversation_id)
+    limit = max(1, min(limit, 300))
+    vis = and_(_visible(member, now_iso()), Message.deleted_at.is_(None))
+    if kind == "links":
+        rows = db.execute(
+            select(Message).where(vis, Message.body.ilike("%http%")).order_by(Message.seq.desc()).limit(limit)
+        ).scalars()
+        out = []
+        for m in rows:
+            for url in _URL_RE.findall(m.body or ""):
+                out.append({"kind": "link", "url": url.rstrip(".,);"), "message_id": m.id, "seq": m.seq, "sender_id": m.sender_id, "created_at": m.created_at})
+        return out[:limit]
+    mime = Attachment.mime_type
+    if kind == "media":
+        cond = mime.like("image/%")
+    elif kind == "audio":
+        cond = mime.like("audio/%")
+    else:
+        cond = and_(mime.not_like("image/%"), mime.not_like("audio/%"))
+    rows = db.execute(
+        select(Attachment, Message)
+        .join(Message, Message.id == Attachment.message_id)
+        .where(vis, cond)
+        .order_by(Message.seq.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "kind": kind,
+            "message_id": m.id, "seq": m.seq, "sender_id": m.sender_id, "created_at": m.created_at,
+            "attachment": {"id": a.id, "file_name": a.file_name, "mime_type": a.mime_type, "size_bytes": a.size_bytes,
+                           "width": a.width, "height": a.height},
+        }
+        for a, m in rows
+    ]

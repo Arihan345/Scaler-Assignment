@@ -39,6 +39,7 @@ class MySettingsPatch(BaseModel):
     is_pinned: bool | None = None
     is_archived: bool | None = None
     muted_until: str | None = None
+    marked_unread: bool | None = None
 
 
 class AddMembers(BaseModel):
@@ -54,6 +55,8 @@ class SendMessage(BaseModel):
     body: str | None = None
     reply_to_id: int | None = None
     attachment_ids: list[str] = Field(default_factory=list, max_length=10)
+    mentions: list[str] = Field(default_factory=list, max_length=20)
+    forward_from_id: int | None = None  # re-share this message's attachments (copied server-side)
 
 
 class EditBody(BaseModel):
@@ -86,3 +89,14 @@ class InboundCreate(BaseModel):
 
 class InboundPost(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+
+
+class PrivacyPatch(BaseModel):
+    read_receipts: bool | None = None
+    typing_indicators: bool | None = None
+    show_online: bool | None = None
+
+
+class StoryCreate(BaseModel):
+    body: str
+    bg: str | None = None

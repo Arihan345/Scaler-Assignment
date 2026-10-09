@@ -61,3 +61,18 @@ def test_old_database_gets_edited_at_column(client):
         cols = {r[1] for r in db.execute(text("PRAGMA table_info(messages)"))}
     assert "edited_at" in cols
     engine._add_missing_columns()  # idempotent
+
+
+def test_realtime_event_carries_attachments(client, monkeypatch):
+    """Regression: autoflush is off, so the message.new payload used to ship with attachments=[] (receivers saw an empty bubble)."""
+    from app.api import messages as messages_api
+
+    a, b = login(client, "alice", "Alice"), login(client, "bob", "Bob")
+    conv = direct(client, a, b)
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    up = client.post("/api/attachments", data={"conversation_id": conv}, files={"file": ("pic.png", png, "image/png")}, headers=a["h"])
+    seen = []
+    monkeypatch.setattr(messages_api, "publish", lambda events: seen.extend(events))
+    assert send(client, a, conv, "", attachment_ids=[up.json()["attachment_id"]]).status_code == 201
+    new = [e for e in seen if e.event == "message.new"]
+    assert new and new[0].payload["attachments"] and new[0].payload["attachments"][0]["file_name"] == "pic.png"

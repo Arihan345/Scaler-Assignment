@@ -45,7 +45,17 @@ def create_all() -> None:
 
 
 # create_all never alters existing tables, so columns added after a database was first created are patched in here.
-_ADDED_COLUMNS = [("messages", "edited_at", "TEXT")]
+_ADDED_COLUMNS = [
+    ("messages", "edited_at", "TEXT"),
+    ("messages", "pinned_at", "TEXT"),
+    ("messages", "mentions", "TEXT"),
+    ("users", "read_receipts", "INTEGER NOT NULL DEFAULT 1"),
+    ("users", "typing_indicators", "INTEGER NOT NULL DEFAULT 1"),
+    ("users", "show_online", "INTEGER NOT NULL DEFAULT 1"),
+    ("conversation_members", "marked_unread", "INTEGER NOT NULL DEFAULT 0"),
+    ("conversation_members", "own_read_seq", "INTEGER NOT NULL DEFAULT 0"),
+    ("conversation_members", "request_pending", "INTEGER NOT NULL DEFAULT 0"),
+]
 
 
 def _add_missing_columns() -> None:

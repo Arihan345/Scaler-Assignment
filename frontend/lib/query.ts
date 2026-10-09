@@ -3,12 +3,18 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ConversationDetail, Message, MessagesPage, Reaction } from "./types";
 
 export const keys = {
-  conversations: (archived = false) => ["conversations", { archived }] as const,
+  conversations: (archived = false, requests = false) => ["conversations", { archived, requests }] as const,
   conversationsAll: ["conversations"] as const,
   conversation: (id: string) => ["conversation", id] as const,
   messages: (id: string) => ["messages", id] as const,
   contacts: ["contacts"] as const,
+  blocked: ["blocked"] as const,
+  pinned: (id: string) => ["pinned", id] as const,
+  media: (id: string, kind: string) => ["media", id, kind] as const,
+  preview: (url: string) => ["link-preview", url] as const,
   search: (q: string) => ["user-search", q] as const,
+  stories: ["stories"] as const,
+  sessions: ["sessions"] as const,
   webhooks: ["webhooks"] as const,
   deliveries: (id: string) => ["webhook-deliveries", id] as const,
 };

@@ -31,3 +31,19 @@ def logout(ctx: tuple[User, SessionRow] = Depends(auth_ctx), db: Session = Depen
 @router.post("/ws-ticket")
 def ws_ticket(user: User = Depends(current_user)):
     return {"ticket": tickets.issue(user.id), "expires_in": int(tickets.TTL_SECONDS)}
+
+
+@router.get("/sessions")
+def sessions(ctx: tuple[User, SessionRow] = Depends(auth_ctx), db: Session = Depends(get_db)):
+    return auth_service.list_sessions(db, ctx[0], ctx[1].id)
+
+
+@router.delete("/sessions/{session_id}")
+def unlink_session(session_id: str, ctx: tuple[User, SessionRow] = Depends(auth_ctx), db: Session = Depends(get_db)):
+    auth_service.revoke_session(db, ctx[0], session_id)
+    return {"ok": True}
+
+
+@router.post("/sessions/revoke-others")
+def unlink_others(ctx: tuple[User, SessionRow] = Depends(auth_ctx), db: Session = Depends(get_db)):
+    return {"revoked": auth_service.revoke_others(db, ctx[0], ctx[1].id)}

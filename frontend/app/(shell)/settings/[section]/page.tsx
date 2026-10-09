@@ -13,18 +13,36 @@ import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
 import { SETTINGS_SECTIONS } from "@/components/shell/SettingsNav";
 import { ContactsSettings } from "@/components/dialogs/ContactsSettings";
+import { DevicesSettings } from "@/components/dialogs/DevicesSettings";
+import { PrivacySettings } from "@/components/dialogs/PrivacySettings";
+import { usePrefs } from "@/store/prefs";
 
-function Placeholder({ rows }: { rows: [string, string, boolean][] }) {
+function PrefRow({ label, sub, k }: { label: string; sub: string; k: "linkPreviews" | "sendWithEnter" | "notifyToasts" | "notifyContent" | "sounds" | "desktopNotify" }) {
+  const on = usePrefs((s) => s[k]);
   return (
-    <>
-      <div className="banner banner--info" style={{ borderRadius: 8, marginBottom: 12 }}>These options are placeholders in this demo and don't change behavior.</div>
-      {rows.map(([label, sub, on]) => (
-        <div className="setting-row" key={label}>
-          <div>{label}<small>{sub}</small></div>
-          <Toggle label={label} checked={on} disabled />
-        </div>
-      ))}
-    </>
+    <div className="setting-row">
+      <div>{label}<small>{sub}</small></div>
+      <Toggle label={label} checked={on} onChange={(v) => usePrefs.getState().set({ [k]: v })} />
+    </div>
+  );
+}
+
+/** Browser (OS-level) notifications: needs the browser's permission, asked only when the user turns this on. */
+function DesktopNotifyRow() {
+  const on = usePrefs((s) => s.desktopNotify);
+  const supported = typeof Notification !== "undefined";
+  const denied = supported && Notification.permission === "denied";
+  async function change(v: boolean) {
+    if (!v) return usePrefs.getState().set({ desktopNotify: false });
+    const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (perm === "granted") usePrefs.getState().set({ desktopNotify: true });
+    else useUi.getState().toast("Notifications are blocked in your browser settings for this site.", "error");
+  }
+  return (
+    <div className="setting-row">
+      <div>Desktop notifications<small>{!supported ? "This browser doesn't support notifications." : denied ? "Blocked in your browser settings for this site." : "Show a system notification when a message arrives while this tab is in the background."}</small></div>
+      <Toggle label="Desktop notifications" checked={on && !denied} onChange={(v) => void change(v)} />
+    </div>
   );
 }
 
@@ -85,9 +103,22 @@ export default function SettingsSection() {
             </div>
           </div>
         )}
-        {section === "chats" && <Placeholder rows={[["Generate link previews", "Show previews for links in messages", true], ["Send with Enter", "Press Enter to send, Shift+Enter for a new line", true]]} />}
-        {section === "notifications" && <Placeholder rows={[["Message notifications", "Show a notification for new messages", true], ["Show message content", "Include text in notifications", false], ["Play sounds", "Sound when a message arrives", false]]} />}
-        {section === "privacy" && <Placeholder rows={[["Read receipts", "Let others see when you've read their messages", true], ["Typing indicators", "Let others see when you're typing", true], ["Screen lock", "Require a passcode to open the app", false]]} />}
+        {section === "chats" && (
+          <>
+            <PrefRow k="linkPreviews" label="Generate link previews" sub="Show a card for the first link in a message. The preview is fetched by the server, never by the sender's device." />
+            <PrefRow k="sendWithEnter" label="Send with Enter" sub="On: Enter sends and Shift+Enter adds a line. Off: Ctrl/Cmd+Enter sends." />
+          </>
+        )}
+        {section === "notifications" && (
+          <>
+            <PrefRow k="notifyToasts" label="Message notifications" sub="Show a banner when a message arrives in a chat you're not looking at." />
+            {<DesktopNotifyRow />}
+            <PrefRow k="notifyContent" label="Show message content" sub="Include the message text in the banner." />
+            <PrefRow k="sounds" label="Play sounds" sub="Play a short chime for new messages." />
+          </>
+        )}
+        {section === "privacy" && <PrivacySettings />}
+        {section === "devices" && <DevicesSettings />}
         {!meta && <p className="muted">Unknown section.</p>}
       </div>
     </div>

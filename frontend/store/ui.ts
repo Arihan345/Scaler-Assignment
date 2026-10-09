@@ -34,6 +34,12 @@ type UiState = {
   editing: Record<string, Message | null>;
   setEditing: (conv: string, m: Message | null) => void;
 
+  /** Multi-select mode ("Select messages"): the open conversation and the chosen message ids. */
+  selection: { conv: string; ids: number[] } | null;
+  startSelection: (conv: string, firstId: number) => void;
+  toggleSelected: (id: number) => void;
+  clearSelection: () => void;
+
   toasts: Toast[];
   toast: (text: string, kind?: Toast["kind"], action?: Toast["action"]) => void;
   dismissToast: (id: number) => void;
@@ -93,6 +99,16 @@ export const useUi = create<UiState>((set, get) => ({
 
   editing: {},
   setEditing: (conv, m) => set((s) => ({ editing: { ...s.editing, [conv]: m } })),
+
+  selection: null,
+  startSelection: (conv, firstId) => set({ selection: { conv, ids: [firstId] } }),
+  toggleSelected: (id) =>
+    set((s) => {
+      if (!s.selection) return {};
+      const ids = s.selection.ids.includes(id) ? s.selection.ids.filter((x) => x !== id) : [...s.selection.ids, id];
+      return { selection: ids.length ? { ...s.selection, ids } : null };
+    }),
+  clearSelection: () => set({ selection: null }),
 
   toasts: [],
   toast: (text, kind = "info", action) => {

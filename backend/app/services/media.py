@@ -8,7 +8,13 @@ from app.core.errors import AppError, validation
 from app.core.ids import new_id
 
 IMAGE_EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp"}
-ATTACHMENT_EXT = {**IMAGE_EXT, "application/pdf": ".pdf", "text/plain": ".txt"}
+AUDIO_EXT = {"audio/webm": ".webm", "audio/ogg": ".ogg", "audio/mp4": ".m4a", "audio/mpeg": ".mp3", "audio/wav": ".wav"}  # voice notes
+ATTACHMENT_EXT = {**IMAGE_EXT, **AUDIO_EXT, "application/pdf": ".pdf", "text/plain": ".txt"}
+
+
+def base_mime(content_type: str | None) -> str:
+    """'audio/webm;codecs=opus' -> 'audio/webm' (MediaRecorder adds codec parameters)."""
+    return (content_type or "").split(";")[0].strip().lower()
 
 
 def read_limited(file: UploadFile, limit: int) -> bytes:

@@ -1,5 +1,5 @@
 "use client";
-import { Archive, ListFilter, MoreHorizontal, Search, SquarePen, UserPlus, X } from "lucide-react";
+import { Archive, ListFilter, MoreHorizontal, Search, SquarePen, UserPlus, X, MailQuestion } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -18,6 +18,7 @@ import { IconButton } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import { EmptyState, ErrorState } from "@/components/ui/EmptyState";
 import { ListSkeleton } from "@/components/ui/Skeleton";
+import { StoriesPane } from "@/components/stories/StoriesPane";
 import { OPEN_NEW_CHAT } from "./useShortcuts";
 
 function useDebounced<T>(v: T, ms: number) {
@@ -29,6 +30,7 @@ function useDebounced<T>(v: T, ms: number) {
 export function ListPane() {
   const pathname = usePathname();
   if (pathname.startsWith("/settings") || pathname.startsWith("/webhooks")) return <aside className="list-pane"><SettingsNav /></aside>;
+  if (pathname.startsWith("/stories")) return <aside className="list-pane"><StoriesPane /></aside>;
   return <aside className="list-pane"><Suspense fallback={null}><ChatList /></Suspense></aside>;
 }
 
@@ -41,9 +43,12 @@ function ChatList() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const params = useSearchParams();
   const archived = params.get("archived") === "1";
+  const showRequests = params.get("requests") === "1";
   const [newChat, setNewChat] = useState(false);
   const dq = useDebounced(q, 250);
-  const list = useConversationList(archived);
+  const list = useConversationList(archived, showRequests);
+  const requests = useConversationList(false, true);
+  const requestCount = requests.data?.length ?? 0;
   const contacts = useContacts();
   const found = useUserSearch(dq);
   const activeId = pathname.startsWith("/c/") ? pathname.split("/")[2] : null;
@@ -97,10 +102,10 @@ function ChatList() {
   return (
     <>
       <div className="list-header">
-        <h1>{archived ? "Archived chats" : "Chats"}</h1>
+        <h1>{archived ? "Archived chats" : showRequests ? "Message requests" : "Chats"}</h1>
         <IconButton label="New chat (Ctrl+N)" onClick={() => setNewChat(true)}><SquarePen size={22} /></IconButton>
         <Menu trigger={<span className="icon-btn" role="button" aria-label="More options" tabIndex={0}><MoreHorizontal size={22} /></span>} items={[
-          archived
+          archived || showRequests
             ? { label: "Back to chats", icon: <X size={16} />, onClick: () => router.push("/") }
             : { label: "Archived chats", icon: <Archive size={16} />, onClick: () => router.push("/?archived=1") },
           { label: "Settings", onClick: () => router.push("/settings") },
@@ -125,6 +130,16 @@ function ChatList() {
           <ErrorState message="Couldn't load your chats." onRetry={() => list.refetch()} />
         ) : (
           <>
+            {!archived && !showRequests && !term && requestCount > 0 && (
+              <div className="conv-row request-row" role="button" tabIndex={0} onClick={() => router.push("/?requests=1")} onKeyDown={(e) => e.key === "Enter" && router.push("/?requests=1")}>
+                <span className="avatar request-row__icon"><MailQuestion size={22} /></span>
+                <div className="conv-row__body">
+                  <div className="conv-row__title">Message requests</div>
+                  <div className="conv-row__preview">{requestCount} {requestCount === 1 ? "person wants" : "people want"} to chat with you</div>
+                </div>
+                <span className="badge">{requestCount}</span>
+              </div>
+            )}
             {term && rows.length > 0 && <div className="list-section">Chats</div>}
             {rows.map((c) => (
               <ConversationRow key={c.id} item={c} active={c.id === activeId} onOpen={() => router.push(`/c/${c.id}`)} />
@@ -141,8 +156,8 @@ function ChatList() {
               </div>
             ))}
             {rows.length === 0 && people.length === 0 && (
-              <EmptyState title={term ? "No results" : unreadOnly ? "No unread chats" : archived ? "No archived chats" : "No chats"}>
-                {term ? `Nothing matches “${q}”.` : !unreadOnly && !archived ? "Recent chats will appear here." : undefined}
+              <EmptyState title={term ? "No results" : unreadOnly ? "No unread chats" : archived ? "No archived chats" : showRequests ? "No message requests" : "No chats"}>
+                {term ? `Nothing matches “${q}”.` : !unreadOnly && !archived && !showRequests ? "Recent chats will appear here." : undefined}
               </EmptyState>
             )}
           </>

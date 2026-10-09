@@ -1,15 +1,23 @@
 "use client";
+import { Bookmark } from "lucide-react";
 import { useState } from "react";
 import { mediaUrl } from "@/lib/api";
 import { colorFor } from "@/lib/colors";
 import { initials } from "@/lib/format";
 
-type Props = { name: string; id: string; src?: string | null; size?: number; online?: boolean };
+type Props = { name: string; id: string; src?: string | null; size?: number; online?: boolean; note?: boolean };
 
-export function Avatar({ name, id, src, size = 48, online }: Props) {
+export function Avatar({ name, id, src, size = 48, online, note }: Props) {
   const url = mediaUrl(src);
   const [broken, setBroken] = useState(false);
   const showImg = !!url && !broken;
+  if (note) {
+    return (
+      <span className="avatar" style={{ width: size, height: size, background: "var(--blue)" }} aria-hidden="true">
+        <Bookmark size={Math.round(size * 0.46)} fill="currentColor" />
+      </span>
+    );
+  }
   return (
     <span
       className="avatar"

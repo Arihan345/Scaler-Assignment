@@ -1,5 +1,5 @@
 "use client";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export type MenuItem = {
   label: string;
@@ -36,6 +36,24 @@ export function MenuPopup({
     if (top + height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - height - 8);
     setPos({ left, top });
   }, [x, y, alignRight]);
+
+  // Esc closes from anywhere; arrows move between items (focus starts on the first one).
+  useEffect(() => {
+    const items = () => Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("button[role=menuitem]") ?? []);
+    items()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); onClose(); return; }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const list = items();
+      const i = list.indexOf(document.activeElement as HTMLButtonElement);
+      const next = e.key === "ArrowDown" ? (i + 1) % list.length : (i - 1 + list.length) % list.length;
+      list[next]?.focus();
+    };
+    window.addEventListener("keydown", onKey, true); // capture: run before the global Esc shortcut
+    return () => window.removeEventListener("keydown", onKey, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div

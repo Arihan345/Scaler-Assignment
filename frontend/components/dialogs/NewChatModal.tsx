@@ -104,6 +104,19 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
       <div className="field" style={{ marginBottom: 8 }}>
         <input autoFocus placeholder="Search name, username or phone number" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search people" />
       </div>
+      {!isGroup && (!term || "note to self".includes(term)) && (
+        <button className="pick-row" onClick={async () => {
+          try {
+            const conv = await api.post<ConversationDetail>("/conversations/note-to-self");
+            qc.invalidateQueries({ queryKey: keys.conversationsAll });
+            onClose();
+            router.push(`/c/${conv.id}`);
+          } catch (e) { setError(errorMessage(e)); }
+        }}>
+          <Avatar note id="note" name="Note to Self" size={40} />
+          <b>Note to Self</b>
+        </button>
+      )}
       {!isGroup && (
         <button className="pick-row" onClick={() => { setMode("group"); setPicked([]); }}>
           <span className="avatar" style={{ width: 40, height: 40, background: "var(--blue)" }}><Users size={20} /></span>

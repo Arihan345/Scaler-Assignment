@@ -1,5 +1,5 @@
 "use client";
-import { Archive, BellOff, MoreHorizontal, Pin, PinOff, Bell } from "lucide-react";
+import { Archive, AtSign, BellOff, MailCheck, MailOpen, MoreHorizontal, Pin, PinOff, Bell } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/api";
@@ -38,6 +38,15 @@ export function ConversationRow({ item, active, onOpen }: { item: ConversationLi
       ? { label: "Unmute", icon: <Bell size={16} />, onClick: () => patch({ muted_until: null }) }
       : { label: "Mute for 8 hours", icon: <BellOff size={16} />, onClick: () => patch({ muted_until: new Date(Date.now() + 8 * 3600_000).toISOString() }) },
     { label: "Mute always", icon: <BellOff size={16} />, hidden: muted, onClick: () => patch({ muted_until: "2999-01-01T00:00:00.000Z" }) },
+    item.unread_count > 0 || item.marked_unread
+      ? { label: "Mark as read", icon: <MailCheck size={16} />, onClick: async () => {
+          try {
+            if (item.unread_count > 0 && item.last_message) await api.post(`/conversations/${item.id}/read`, { up_to_seq: item.last_message.seq });
+            await api.patch(`/conversations/${item.id}/me`, { marked_unread: false });
+          } catch { useUi.getState().toast("Couldn't update chat", "error"); }
+          qc.invalidateQueries({ queryKey: keys.conversationsAll });
+        } }
+      : { label: "Mark as unread", icon: <MailOpen size={16} />, onClick: () => patch({ marked_unread: true }) },
     { label: item.is_archived ? "Unarchive" : "Archive", icon: <Archive size={16} />, onClick: () => patch({ is_archived: !item.is_archived }) },
   ];
 
@@ -46,12 +55,12 @@ export function ConversationRow({ item, active, onOpen }: { item: ConversationLi
       <div
         role="button"
         tabIndex={0}
-        className={`conv-row ${active ? "is-active" : ""} ${item.unread_count > 0 ? "is-unread" : ""}`}
+        className={`conv-row ${active ? "is-active" : ""} ${item.unread_count > 0 || item.marked_unread ? "is-unread" : ""}`}
         onClick={onOpen}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())}
         onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }}
       >
-        <Avatar id={item.peer?.id ?? item.id} name={title} src={item.type === "GROUP" ? item.avatar_url : item.peer?.avatar_url} online={online} />
+        <Avatar note={item.is_note_to_self} id={item.peer?.id ?? item.id} name={title} src={item.type === "GROUP" ? item.avatar_url : item.peer?.avatar_url} online={online} />
         <div className="conv-row__body">
           <div className="conv-row__top">
             <span className="conv-row__title">{title}</span>
@@ -62,8 +71,11 @@ export function ConversationRow({ item, active, onOpen }: { item: ConversationLi
             <span className="conv-row__icons">
               {item.is_pinned && <Pin size={13} />}
               {muted && <BellOff size={13} />}
+              {item.has_unread_mention && item.unread_count > 0 && <span className="badge badge--mention" title="You were mentioned"><AtSign size={12} /></span>}
               {item.unread_count > 0 ? (
                 <span className={`badge ${muted ? "badge--muted" : ""}`}>{item.unread_count > 99 ? "99+" : item.unread_count}</span>
+              ) : item.marked_unread ? (
+                <span className="badge badge--dot" aria-label="Marked as unread" />
               ) : (
                 item.last_message && item.last_message.sender_id === meId && !item.last_message.deleted_at && item.last_message.type !== "SYSTEM" && (
                   <span className="row-tick"><StatusIcon status={item.last_message.status ?? "sent"} size={17} /></span>

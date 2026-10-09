@@ -42,7 +42,8 @@ def send_message(
 ):
     msg, created, events = message_service.send_message(
         db, user, conversation_id, body=body.body, client_message_id=body.client_message_id,
-        reply_to_id=body.reply_to_id, attachment_ids=body.attachment_ids,
+        reply_to_id=body.reply_to_id, attachment_ids=body.attachment_ids, mentions=body.mentions,
+        forward_from_id=body.forward_from_id,
     )
     response.status_code = 201 if created else 200  # a deduplicated retry returns the original with 200
     background.add_task(publish, events)
@@ -72,6 +73,30 @@ def search_messages(
     conversation_id: str, q: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)
 ):
     return {"messages": message_service.search_messages(db, user, conversation_id, q)}
+
+
+@router.get("/conversations/{conversation_id}/media")
+def conversation_media(
+    conversation_id: str, kind: str = "media", user: User = Depends(current_user), db: Session = Depends(get_db)
+):
+    return {"items": message_service.list_media(db, user, conversation_id, kind)}
+
+
+@router.get("/conversations/{conversation_id}/pinned")
+def pinned_messages(conversation_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return {"messages": message_service.list_pinned(db, user, conversation_id)}
+
+
+@router.put("/messages/{message_id}/pin")
+def pin_message(message_id: int, background: BackgroundTasks, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    background.add_task(publish, message_service.set_pinned(db, user, message_id, True))
+    return {"ok": True}
+
+
+@router.delete("/messages/{message_id}/pin")
+def unpin_message(message_id: int, background: BackgroundTasks, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    background.add_task(publish, message_service.set_pinned(db, user, message_id, False))
+    return {"ok": True}
 
 
 @router.patch("/messages/{message_id}")
@@ -130,9 +155,10 @@ def upload_attachment(
     user: User = Depends(current_user), db: Session = Depends(get_db),
 ):
     require_active_member(db, user.id, conversation_id)
-    ext = media.ATTACHMENT_EXT.get(file.content_type or "")
+    mime = media.base_mime(file.content_type)
+    ext = media.ATTACHMENT_EXT.get(mime)
     if ext is None:
-        raise validation("Unsupported file type (images, PDF and plain text are allowed)")
+        raise validation("Unsupported file type (images, voice notes, PDF and plain text are allowed)")
     data = media.read_limited(file, settings.max_upload_bytes)
     att_id = new_id()
     folder = os.path.join(settings.upload_dir, "attachments")
@@ -144,11 +170,11 @@ def upload_attachment(
     db.add(
         Attachment(
             id=att_id, uploader_id=user.id, conversation_id=conversation_id, file_name=name,
-            mime_type=file.content_type, size_bytes=len(data), storage_path=path, created_at=now_iso(),
+            mime_type=mime, size_bytes=len(data), storage_path=path, created_at=now_iso(),
         )
     )
     db.commit()
-    return {"attachment_id": att_id, "file_name": name, "mime_type": file.content_type, "size_bytes": len(data)}
+    return {"attachment_id": att_id, "file_name": name, "mime_type": mime, "size_bytes": len(data)}
 
 
 @router.get("/attachments/{attachment_id}")
@@ -171,5 +197,5 @@ def get_attachment(attachment_id: str, user: User = Depends(current_user), db: S
     return FileResponse(
         att.storage_path, media_type=att.mime_type, filename=att.file_name,
         headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600"},
-        content_disposition_type="inline" if (att.mime_type or "").startswith("image/") else "attachment",
+        content_disposition_type="inline" if (att.mime_type or "").startswith(("image/", "audio/")) else "attachment",
     )

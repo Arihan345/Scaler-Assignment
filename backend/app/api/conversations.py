@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import current_user
 from app.db.engine import get_db
+from app.core.errors import validation
 from app.db.models import User
 from app.realtime.connection_manager import manager
 from app.realtime.dispatcher import publish
@@ -24,17 +25,36 @@ def list_conversations(
     q: str | None = None,
     filter: str | None = Query(default=None),
     archived: bool = False,
+    requests: bool = False,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     return cs.list_conversations(
-        db, user.id, q=q, unread_only=(filter == "unread"), archived=archived, online_ids=manager.online_ids()
+        db, user.id, q=q, unread_only=(filter == "unread"), archived=archived, online_ids=manager.online_ids(),
+        requests=requests,
     )
+
+
+@router.post("/{conversation_id}/request/{action}")
+def resolve_request(
+    conversation_id: str, action: str, background: BackgroundTasks,
+    user: User = Depends(current_user), db: Session = Depends(get_db),
+):
+    if action not in ("accept", "delete"):
+        raise validation("Unknown action")
+    background.add_task(publish, cs.resolve_request(db, user, conversation_id, action))
+    return {"ok": True}
 
 
 @router.post("/direct")
 def direct(body: DirectCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
     conv, _ = cs.get_or_create_direct(db, user, body.user_id)  # idempotent: returns the existing chat
+    return _detail(db, user, conv.id)
+
+
+@router.post("/note-to-self")
+def note_to_self(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    conv = cs.get_or_create_note_to_self(db, user)
     return _detail(db, user, conv.id)
 
 

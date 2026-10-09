@@ -15,7 +15,7 @@ export type PendingAttachment = { id: string; name: string; mime: string; url: s
 export function sendMessage(
   qc: QueryClient,
   convId: string,
-  input: { body: string; replyTo: Message | null; attachments: PendingAttachment[] },
+  input: { body: string; replyTo: Message | null; attachments: PendingAttachment[]; mentions?: string[] },
 ) {
   const item: OutboxItem = {
     client_message_id: uuid(),
@@ -23,6 +23,7 @@ export function sendMessage(
     body: input.body,
     reply_to: input.replyTo,
     attachment_ids: input.attachments.map((a) => a.id),
+    mentions: input.mentions ?? [],
     attachment_previews: input.attachments,
     status: "sending",
     created_at: new Date().toISOString(),
@@ -41,6 +42,7 @@ async function post(qc: QueryClient, item: OutboxItem) {
       body: item.body,
       reply_to_id: item.reply_to?.id ?? null,
       attachment_ids: item.attachment_ids,
+      mentions: item.mentions ?? [],
     });
     upsertMessage(qc, item.conversation_id, msg);
     ui.removeOutbox(item.conversation_id, item.client_message_id);

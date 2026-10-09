@@ -26,7 +26,10 @@ def login(client, identifier: str, name: str | None = None) -> dict:
 def direct(client, a: dict, b: dict) -> str:
     r = client.post("/api/conversations/direct", json={"user_id": b["id"]}, headers=a["h"])
     assert r.status_code == 200, r.text
-    return r.json()["id"]
+    cid = r.json()["id"]
+    # most tests exercise normal chats, so the recipient accepts the (non-contact) message request up front
+    client.post(f"/api/conversations/{cid}/request/accept", headers=b["h"])
+    return cid
 
 
 def send(client, user: dict, conv_id: str, body: str = "hi", client_id: str | None = None, **extra):

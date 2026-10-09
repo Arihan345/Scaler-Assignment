@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef } from "react";
 import { WS_URL, api } from "@/lib/api";
+import { setCallSender } from "@/lib/calls";
 import { applyEvent, scheduleDelivered } from "@/lib/realtime";
 import { keys } from "@/lib/query";
 import type { ConversationListItem, WsEnvelope } from "@/lib/types";
@@ -118,6 +119,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
   }, []);
+
+  useEffect(() => { setCallSender(send); }, [send]);
 
   return <Ctx.Provider value={{ send }}>{children}</Ctx.Provider>;
 }

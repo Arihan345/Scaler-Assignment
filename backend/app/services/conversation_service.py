@@ -9,7 +9,7 @@ from app.core.errors import forbidden, not_found, validation
 from app.core.ids import direct_key, new_id
 from app.core.time import now_iso
 from app.db.engine import begin_write
-from app.db.models import Conversation, ConversationMember, Message, User
+from app.db.models import Contact, Block, Conversation, ConversationMember, Message, User
 from app.services import message_service, serializers, webhook_service
 from app.services.events import Event
 from app.services.membership import (
@@ -30,7 +30,7 @@ UNREAD_SQL = text(
     FROM conversation_members cm
     JOIN messages m ON m.conversation_id = cm.conversation_id
     WHERE cm.user_id = :me AND cm.left_at IS NULL
-      AND m.seq > MAX(cm.last_read_seq, cm.joined_seq)
+      AND m.seq > MAX(cm.last_read_seq, cm.own_read_seq, cm.joined_seq)
       AND (cm.left_seq IS NULL OR m.seq <= cm.left_seq)
       AND m.sender_id IS NOT :me
       AND m.type != 'SYSTEM'
@@ -38,6 +38,19 @@ UNREAD_SQL = text(
       AND (m.expires_at IS NULL OR m.expires_at > :now)
       AND m.id NOT IN (SELECT message_id FROM message_hidden WHERE user_id = :me)
     GROUP BY cm.conversation_id
+    """
+)
+
+MENTION_SQL = text(
+    """
+    SELECT DISTINCT cm.conversation_id AS cid
+    FROM conversation_members cm
+    JOIN messages m ON m.conversation_id = cm.conversation_id
+    WHERE cm.user_id = :me AND cm.left_at IS NULL
+      AND m.seq > MAX(cm.last_read_seq, cm.own_read_seq, cm.joined_seq)
+      AND (cm.left_seq IS NULL OR m.seq <= cm.left_seq)
+      AND m.sender_id IS NOT :me AND m.deleted_at IS NULL
+      AND m.mentions LIKE '%"' || :me || '"%'
     """
 )
 
@@ -94,6 +107,7 @@ def _list_items(db: Session, me_id: str, pairs: list[tuple[ConversationMember, C
         return []
     now = now_iso()
     unread = {r.cid: r.n for r in db.execute(UNREAD_SQL, {"me": me_id, "now": now})}
+    mentioned = {r.cid for r in db.execute(MENTION_SQL, {"me": me_id})}
     last_ids = [r.mid for r in db.execute(LAST_MESSAGE_SQL, {"me": me_id, "now": now}) if r.mid]
     last_msgs = {}
     if last_ids:
@@ -129,7 +143,12 @@ def _list_items(db: Session, me_id: str, pairs: list[tuple[ConversationMember, C
             "member_count": sum(1 for m in members_by_conv.get(conv.id, []) if m.left_at is None),
             "last_message": last_dto,
             "unread_count": unread.get(conv.id, 0),
-            "my_last_read_seq": me.last_read_seq,
+            "my_last_read_seq": max(me.last_read_seq, me.own_read_seq),
+            "marked_unread": bool(me.marked_unread),
+            "has_unread_mention": conv.id in mentioned,
+            "is_note_to_self": False,
+            "blocked": False,
+            "is_request": bool(me.request_pending),
             "last_activity_at": conv.last_activity_at,
             "is_pinned": bool(me.is_pinned),
             "is_archived": bool(me.is_archived),
@@ -143,13 +162,16 @@ def _list_items(db: Session, me_id: str, pairs: list[tuple[ConversationMember, C
             if other is not None and other.user_id in users:
                 u = users[other.user_id]
                 item["peer"] = serializers.user_dto(u, online=u.id in online_ids)
+                item["blocked"] = db.get(Block, (me_id, u.id)) is not None
+            elif other is None:
+                item["is_note_to_self"] = True  # a DM whose only member is me
         items.append(item)
     return items
 
 
 def list_conversations(
     db: Session, me_id: str, *, q: str | None = None, unread_only: bool = False, archived: bool = False,
-    online_ids=frozenset(),
+    online_ids=frozenset(), requests: bool = False,
 ) -> list[dict]:
     rows = db.execute(
         select(ConversationMember, Conversation)
@@ -157,7 +179,8 @@ def list_conversations(
         .where(
             ConversationMember.user_id == me_id,
             ConversationMember.left_at.is_(None),
-            ConversationMember.is_archived == (1 if archived else 0),
+            ConversationMember.is_archived == (0 if requests else (1 if archived else 0)),
+            ConversationMember.request_pending == (1 if requests else 0),
         )
     ).all()
     # A DM nobody has written in yet stays invisible (it's only a navigation target).
@@ -192,7 +215,8 @@ def get_detail(db: Session, me_id: str, conversation_id: str, online_ids=frozens
     else:  # a removed member can still open the thread (read-only), without list extras
         item = {
             "id": conv.id, "type": conv.type, "title": conv.title, "avatar_url": conv.avatar_url, "member_count": 0,
-            "last_message": None, "unread_count": 0, "my_last_read_seq": me.last_read_seq,
+            "last_message": None, "unread_count": 0, "my_last_read_seq": max(me.last_read_seq, me.own_read_seq),
+            "marked_unread": False, "has_unread_mention": False, "is_note_to_self": False, "blocked": False, "is_request": False,
             "last_activity_at": conv.last_activity_at, "is_pinned": False, "is_archived": False, "muted_until": None,
             "disappearing_seconds": conv.disappearing_seconds, "my_role": me.role, "peer": None,
         }
@@ -243,10 +267,33 @@ def get_or_create_direct(db: Session, me: User, other_id: str) -> tuple[Conversa
     conv = Conversation(id=new_id(), type="DIRECT", direct_key=key, created_by=me.id, created_at=now, last_activity_at=now)
     db.add(conv)
     db.flush()
+    # A first message from someone the other person hasn't added as a contact arrives as a "message request".
+    known = db.get(Contact, (other_id, me.id)) is not None
     for uid in (me.id, other_id):
-        db.add(ConversationMember(conversation_id=conv.id, user_id=uid, joined_at=now))
+        pending = 1 if (uid == other_id and not known) else 0
+        db.add(ConversationMember(conversation_id=conv.id, user_id=uid, joined_at=now, request_pending=pending))
     db.commit()
     return conv, True
+
+
+def get_or_create_note_to_self(db: Session, me: User) -> Conversation:
+    """'Note to Self': a DM whose only member is the user. The direct_key 'id:id' keeps it unique per user."""
+    key = direct_key(me.id, me.id)
+    conv = db.execute(select(Conversation).where(Conversation.direct_key == key)).scalar_one_or_none()
+    if conv:
+        return conv
+    begin_write(db)
+    conv = db.execute(select(Conversation).where(Conversation.direct_key == key)).scalar_one_or_none()
+    if conv:
+        db.commit()
+        return conv
+    now = now_iso()
+    conv = Conversation(id=new_id(), type="DIRECT", direct_key=key, created_by=me.id, created_at=now, last_activity_at=now)
+    db.add(conv)
+    db.flush()
+    db.add(ConversationMember(conversation_id=conv.id, user_id=me.id, joined_at=now))
+    db.commit()
+    return conv
 
 
 def create_group(db: Session, me: User, title: str, member_ids: list[str]) -> tuple[Conversation, list[Event]]:
@@ -280,6 +327,20 @@ def create_group(db: Session, me: User, title: str, member_ids: list[str]) -> tu
 
 # ---------------------------------------------------------------- per-user + shared settings
 
+def resolve_request(db: Session, me: User, conversation_id: str, action: str) -> list[Event]:
+    """Accept (move into the main list, receipts start flowing) or delete (archive it and forget the request)."""
+    begin_write(db)
+    member = require_active_member(db, me.id, conversation_id)
+    if not member.request_pending:
+        db.commit()
+        return []
+    member.request_pending = 0
+    if action == "delete":
+        member.is_archived = 1
+    db.commit()
+    return [Event([me.id], "conversation.updated", conversation_id, {})]
+
+
 def update_my_settings(db: Session, me: User, conversation_id: str, fields: dict) -> list[Event]:
     begin_write(db)
     member = require_active_member(db, me.id, conversation_id)
@@ -287,6 +348,8 @@ def update_my_settings(db: Session, me: User, conversation_id: str, fields: dict
         member.is_pinned = 1 if fields["is_pinned"] else 0
     if "is_archived" in fields and fields["is_archived"] is not None:
         member.is_archived = 1 if fields["is_archived"] else 0
+    if "marked_unread" in fields and fields["marked_unread"] is not None:
+        member.marked_unread = 1 if fields["marked_unread"] else 0
     if "muted_until" in fields:
         v = fields["muted_until"]
         member.muted_until = None if v in (None, "") else (FOREVER if v == "forever" else v)

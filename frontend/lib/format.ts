@@ -61,9 +61,18 @@ export function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-export function convTitle(c: Pick<ConversationListItem, "type" | "title" | "peer">): string {
+export function convTitle(c: Pick<ConversationListItem, "type" | "title" | "peer"> & { is_note_to_self?: boolean }): string {
+  if (c.is_note_to_self) return "Note to Self";
   return c.type === "GROUP" ? c.title ?? "Group" : c.peer?.display_name ?? "Unknown";
 }
+
+export const isVoice = (a: { mime_type: string | null }) => !!a.mime_type?.startsWith("audio/");
+/** Voice notes are uploaded as "voice-<seconds>s.<ext>"; that is where the duration comes from. */
+export function voiceSeconds(name: string | null): number {
+  const m = /voice-(\d+)s/.exec(name ?? "");
+  return m ? Number(m[1]) : 0;
+}
+export const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 export function formatTimer(seconds: number): string {
   if (seconds <= 0) return "Off";
@@ -119,6 +128,13 @@ export function systemText(ev: SystemEvent, members: Member[], meId: string | un
       return ev.seconds
         ? `${actor} set disappearing messages to ${formatTimer(ev.seconds)}`
         : `${actor} turned off disappearing messages`;
+    case "call": {
+      const kind = ev.video ? "video call" : "voice call";
+      const mine = ev.actor === meId;
+      if (ev.outcome === "completed") return `${ev.video ? "Video" : "Voice"} call · ${mmss(ev.duration ?? 0)}`;
+      if (ev.outcome === "declined") return mine ? "Call declined" : `You declined a ${kind}`;
+      return mine ? "No answer" : `Missed ${kind}`;
+    }
     default:
       return "";
   }
@@ -130,7 +146,8 @@ export function previewText(item: ConversationListItem, meId: string | undefined
   if (!m) return item.type === "GROUP" ? "No messages yet" : "";
   if (m.type === "SYSTEM") return m.system_event ? systemText(m.system_event, members ?? [], meId) || "Group updated" : "";
   if (m.deleted_at) return m.sender_id === meId ? "You deleted this message" : "This message was deleted";
-  const body = m.body?.trim() || (m.type === "IMAGE" ? "📷 Photo" : m.type === "FILE" ? "📎 File" : "");
+  const voice = m.attachments?.some(isVoice);
+  const body = m.body?.trim() || (m.type === "IMAGE" ? "📷 Photo" : voice ? "🎤 Voice message" : m.type === "FILE" ? "📎 File" : "");
   if (m.sender_id === meId) return `You: ${body}`;
   if (item.type === "GROUP" && m.sender_name) return `${m.sender_name.split(" ")[0]}: ${body}`;
   return body;
@@ -138,7 +155,7 @@ export function previewText(item: ConversationListItem, meId: string | undefined
 
 export function messageSnippet(m: Message): string {
   if (m.deleted_at) return "Deleted message";
-  return m.body?.trim() || (m.type === "IMAGE" ? "Photo" : m.type === "FILE" ? "File" : "");
+  return m.body?.trim() || (m.type === "IMAGE" ? "Photo" : m.attachments?.some(isVoice) ? "Voice message" : m.type === "FILE" ? "File" : "");
 }
 
 export function conversationOnline(c: Pick<ConversationDetail, "peer">, presence: Record<string, { online: boolean }>): boolean {

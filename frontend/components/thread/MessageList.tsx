@@ -5,7 +5,8 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { api, errorMessage } from "@/lib/api";
 import { retrySend } from "@/lib/actions";
 import { convTitle, dayKey, dayLabel, systemText } from "@/lib/format";
-import { keys, markDeleted, mergeOlder, removeMessages } from "@/lib/query";
+import { keys, markDeleted, mergeOlder, patchMessage, removeMessages } from "@/lib/query";
+import { useAuth } from "@/store/auth";
 import { scheduleRead } from "@/lib/realtime";
 import { computeStatus } from "@/lib/status";
 import type { ConversationDetail, DisplayStatus, Message, MessagesPage, OutboxItem } from "@/lib/types";
@@ -27,7 +28,7 @@ function pendingToMessage(o: OutboxItem, i: number, meId: string): Message {
   return {
     id: -(i + 1), conversation_id: o.conversation_id, seq: PENDING_SEQ + i, sender_id: meId, client_message_id: o.client_message_id,
     type: "TEXT", body: o.body || null, system_event: null, reply_to: o.reply_to ? { id: o.reply_to.id, seq: o.reply_to.seq, sender_id: o.reply_to.sender_id, snippet: o.reply_to.body ?? "", deleted: false } : null,
-    attachments: [], reactions: [], created_at: o.created_at, expires_at: null, deleted_at: null, edited_at: null, status: null,
+    attachments: [], reactions: [], created_at: o.created_at, expires_at: null, deleted_at: null, edited_at: null, pinned_at: null, mentions: o.mentions ?? [], status: null,
   };
 }
 
@@ -49,7 +50,9 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
   const lastAcked = useRef(0);
   const dividerSeq = useRef<number | null | undefined>(undefined);
   const outbox = useUi((s) => s.outbox[convId]);
+  const sharesReceipts = useAuth((s) => s.user?.privacy?.read_receipts);
   const typing = useUi((s) => s.typing[convId]);
+  const selection = useUi((s) => s.selection);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: keys.messages(convId),
@@ -61,12 +64,21 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
   const byId = useMemo(() => new Map(members.map((m) => [m.user.id, m.user] as const)), [members]);
   const me = members.find((m) => m.user.id === meId);
 
+  // Disappearing messages vanish on screen the moment they expire (the server sweeper only reclaims storage).
+  const [expiryTick, setExpiryTick] = useState(0);
+  useEffect(() => {
+    const times = (data?.messages ?? []).map((m) => (m.expires_at ? Date.parse(m.expires_at) : 0)).filter((t) => t > Date.now());
+    if (!times.length) return;
+    const id = setTimeout(() => setExpiryTick((n) => n + 1), Math.max(0, Math.min(...times) - Date.now()) + 50);
+    return () => clearTimeout(id);
+  }, [data, expiryTick]);
+
   const rows: Row[] = useMemo(() => {
-    const msgs = data?.messages ?? [];
+    const msgs = (data?.messages ?? []).filter((m) => !m.expires_at || Date.parse(m.expires_at) > Date.now());
     const known = new Set(msgs.map((m) => m.client_message_id).filter(Boolean));
     const pend = (outbox ?? []).filter((o) => !known.has(o.client_message_id));
     return [...msgs.map((m) => ({ key: `m${m.id}`, msg: m })), ...pend.map((o, i) => ({ key: `p${o.client_message_id}`, msg: pendingToMessage(o, i, meId), pending: o }))];
-  }, [data, outbox, meId]);
+  }, [data, outbox, meId, expiryTick]);
 
   // The "New messages" divider is decided once, from the read position at the moment the chat was opened.
   if (dividerSeq.current === undefined && data) {
@@ -205,6 +217,17 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
     }
   }
 
+  async function togglePin(m: Message) {
+    try {
+      if (m.pinned_at) await api.del(`/messages/${m.id}/pin`);
+      else await api.put(`/messages/${m.id}/pin`);
+      patchMessage(qc, convId, m.id, { pinned_at: m.pinned_at ? null : new Date().toISOString() });
+      qc.invalidateQueries({ queryKey: keys.pinned(convId) });
+    } catch (e) {
+      useUi.getState().toast(errorMessage(e), "error");
+    }
+  }
+
   async function doDelete(m: Message) {
     try {
       await api.del(`/messages/${m.id}`);
@@ -232,7 +255,7 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
           ) : (
             <>
               <div className="intro-card">
-                <Avatar id={detail.peer?.id ?? detail.id} name={convTitle(detail)} src={isGroup ? detail.avatar_url : detail.peer?.avatar_url} size={96} />
+                <Avatar note={detail.is_note_to_self} id={detail.peer?.id ?? detail.id} name={convTitle(detail)} src={isGroup ? detail.avatar_url : detail.peer?.avatar_url} size={96} />
                 <h2>{convTitle(detail)}</h2>
                 <div className="muted">
                   {isGroup ? `${detail.members.filter((m) => m.is_active && !m.user.is_bot).length} members` : detail.peer?.about || (detail.peer?.username ? `@${detail.peer.username}` : detail.peer?.phone_number)}
@@ -254,6 +277,7 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
             let status: DisplayStatus = "sent";
             if (r.pending) status = r.pending.status;
             else if (mine) status = detail.members.length ? computeStatus(m.seq, m.sender_id, members) : (m.status ?? "sent");
+            if (status === "read" && sharesReceipts === false) status = "delivered"; // reciprocal: receipts off => I don't see others' reads
             return (
               <Fragment key={r.key}>
                 {newDay && <div className="date-sep">{dayLabel(m.created_at)}</div>}
@@ -269,6 +293,10 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
                     onReply={(x) => useUi.getState().setReplyTo(convId, x)}
                     onReact={react} onDelete={(x, scope) => (scope === "me" ? void hideForMe(x) : setToDelete(x))} onInfo={setInfo} onForward={setForward} onEdit={(x) => useUi.getState().setEditing(convId, x)}
                     onRetry={(cid) => retrySend(qc, convId, cid)} onJump={jumpToReply} onImage={setLightbox}
+                    onPin={togglePin}
+                    onSelect={(x) => (selection?.conv === convId ? useUi.getState().toggleSelected(x.id) : useUi.getState().startSelection(convId, x.id))}
+                    selecting={selection?.conv === convId} selected={!!selection && selection.conv === convId && selection.ids.includes(m.id)}
+                    mentionNames={(m.mentions ?? []).map((id) => byId.get(id)?.display_name ?? "")}
                   />
                 )}
               </Fragment>
@@ -290,7 +318,7 @@ export function MessageList({ convId, detail, meId, jump }: { convId: string; de
       {toDelete && (
         <ConfirmDialog title="Delete for everyone?" message="This message will be removed for everyone in the chat and replaced with a note that it was deleted." confirmLabel="Delete for everyone" danger onConfirm={() => doDelete(toDelete)} onClose={() => setToDelete(null)} />
       )}
-      {forward && <ForwardModal message={forward} onClose={() => setForward(null)} />}
+      {forward && <ForwardModal messages={[forward]} onClose={() => setForward(null)} />}
       {info && <MessageInfo message={info} onClose={() => setInfo(null)} />}
       {lightbox && <div className="lightbox" onClick={() => setLightbox(null)} role="dialog" aria-label="Image preview"><img src={lightbox} alt="" /></div>}
     </div>

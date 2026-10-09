@@ -3,6 +3,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/store/auth";
 import { SocketProvider } from "@/components/shell/SocketProvider";
+import { CallOverlay } from "@/components/shell/CallOverlay";
 import { NavRail } from "@/components/shell/NavRail";
 import { ListPane } from "@/components/shell/ListPane";
 import { ConnectionBanner } from "@/components/shell/ConnectionBanner";
@@ -23,7 +24,7 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
 
   if (!hydrated || !token || !user || !user.onboarded) return <div className="auth-screen" aria-busy="true" />;
 
-  const hasMain = pathname !== "/" && pathname !== "/settings";
+  const hasMain = pathname !== "/" && pathname !== "/settings" && pathname !== "/stories";
   return (
     <SocketProvider>
       <div className={`app ${hasMain ? "has-thread" : ""}`}>
@@ -34,6 +35,7 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
           <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
         </main>
       </div>
+      <CallOverlay />
     </SocketProvider>
   );
 }

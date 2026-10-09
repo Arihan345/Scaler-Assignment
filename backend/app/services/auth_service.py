@@ -59,6 +59,10 @@ def authenticate(db: DbSession, token: str | None) -> tuple[User, Session]:
     user = db.get(User, sess.user_id)
     if user is None:
         raise AppError("UNAUTHENTICATED", "Session expired, please sign in again", 401)
+    now = now_iso()
+    if not sess.last_used_at or (parse_iso(now) - parse_iso(sess.last_used_at)).total_seconds() > 60:
+        sess.last_used_at = now
+        db.commit()
     return user, sess
 
 
@@ -81,3 +85,40 @@ def update_profile(db: DbSession, user: User, display_name: str | None, about: s
         user.about = about.strip()
     db.commit()
     return user
+
+
+def describe_device(ua: str | None) -> str:
+    """'Mozilla/5.0 (Macintosh...) Chrome/126' -> 'Chrome on macOS' (best effort, for the Linked devices list)."""
+    u = ua or ""
+    os_ = next((n for k, n in (("iPhone", "iOS"), ("iPad", "iOS"), ("Android", "Android"), ("Windows", "Windows"), ("Mac OS X", "macOS"), ("Macintosh", "macOS"), ("CrOS", "ChromeOS"), ("Linux", "Linux")) if k in u), None)
+    br = next((n for k, n in (("Edg/", "Edge"), ("OPR/", "Opera"), ("Firefox/", "Firefox"), ("Chrome/", "Chrome"), ("Safari/", "Safari")) if k in u), None)
+    if br and os_:
+        return f"{br} on {os_}"
+    return br or os_ or (u[:40] if u else "Unknown device")
+
+
+def list_sessions(db: DbSession, user: User, current_id: str) -> list[dict]:
+    now = now_iso()
+    rows = db.execute(
+        select(Session).where(Session.user_id == user.id, Session.revoked_at.is_(None), Session.expires_at > now).order_by(Session.created_at.desc())
+    ).scalars()
+    return [
+        {"id": s.id, "device": describe_device(s.device_label), "created_at": s.created_at, "last_used_at": s.last_used_at or s.created_at, "current": s.id == current_id}
+        for s in rows
+    ]
+
+
+def revoke_session(db: DbSession, user: User, session_id: str) -> None:
+    s = db.get(Session, session_id)
+    if s is None or s.user_id != user.id:
+        raise AppError("NOT_FOUND", "Device not found", 404)
+    s.revoked_at = s.revoked_at or now_iso()
+    db.commit()
+
+
+def revoke_others(db: DbSession, user: User, current_id: str) -> int:
+    rows = list(db.execute(select(Session).where(Session.user_id == user.id, Session.revoked_at.is_(None), Session.id != current_id)).scalars())
+    for s in rows:
+        s.revoked_at = now_iso()
+    db.commit()
+    return len(rows)

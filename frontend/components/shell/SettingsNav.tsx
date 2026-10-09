@@ -24,7 +24,7 @@ export function SettingsNav() {
       </div>
       <nav className="settings__nav" style={{ width: "auto", border: 0 }}>
         {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => (
-          <Link key={id} href={id === "devices" ? "/coming-soon/linked-devices" : id === "webhooks" ? "/webhooks" : `/settings/${id}`} className={pathname === `/settings/${id}` || (id === "webhooks" && pathname === "/webhooks") ? "is-active" : ""}>
+          <Link key={id} href={id === "webhooks" ? "/webhooks" : `/settings/${id}`} className={pathname === `/settings/${id}` || (id === "webhooks" && pathname === "/webhooks") ? "is-active" : ""}>
             <Icon size={20} /> {label}
           </Link>
         ))}
